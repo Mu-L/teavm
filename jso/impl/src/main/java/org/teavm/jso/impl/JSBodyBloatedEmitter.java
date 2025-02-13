@@ -20,10 +20,10 @@ import org.teavm.backend.javascript.spi.GeneratorContext;
 import org.teavm.backend.javascript.spi.InjectorContext;
 import org.teavm.model.MethodReference;
 
-class JSBodyBloatedEmitter implements JSBodyEmitter {
+public class JSBodyBloatedEmitter implements JSBodyEmitter {
     private boolean isStatic;
     private MethodReference method;
-    private String script;
+    public final String script;
     private String[] parameterNames;
     private JsBodyImportInfo[] imports;
 
@@ -34,6 +34,26 @@ class JSBodyBloatedEmitter implements JSBodyEmitter {
         this.script = script;
         this.parameterNames = parameterNames;
         this.imports = imports;
+    }
+
+    @Override
+    public MethodReference method() {
+        return method;
+    }
+
+    @Override
+    public boolean isStatic() {
+        return isStatic;
+    }
+
+    @Override
+    public String[] parameterNames() {
+        return parameterNames.clone();
+    }
+
+    @Override
+    public JsBodyImportInfo[] imports() {
+        return imports.clone();
     }
 
     @Override
@@ -69,8 +89,8 @@ class JSBodyBloatedEmitter implements JSBodyEmitter {
     private void emit(SourceWriter writer, EmissionStrategy strategy) {
         int bodyParamCount = isStatic ? method.parameterCount() : method.parameterCount() - 1;
 
-        writer.append("if (!").appendMethodBody(method).append(".$native)").ws().append('{').indent().newLine();
-        writer.appendMethodBody(method).append(".$native").ws().append('=').ws().append("function(");
+        writer.append("if (!").appendMethod(method).append(".$native)").ws().append('{').indent().newLine();
+        writer.appendMethod(method).append(".$native").ws().append('=').ws().append("function(");
         int count = method.parameterCount();
 
         var first = true;
@@ -135,11 +155,11 @@ class JSBodyBloatedEmitter implements JSBodyEmitter {
 
         writer.append(");").softNewLine();
         writer.outdent().append("};").softNewLine();
-        writer.appendMethodBody(method).ws().append('=').ws().appendMethodBody(method).append(".$native;")
+        writer.appendMethod(method).ws().append('=').ws().appendMethod(method).append(".$native;")
                 .softNewLine();
         writer.outdent().append("}").softNewLine();
 
-        writer.append("return ").appendMethodBody(method).append('(');
+        writer.append("return ").appendMethod(method).append('(');
         for (int i = 0; i < count; ++i) {
             if (i > 0) {
                 writer.append(',').ws();

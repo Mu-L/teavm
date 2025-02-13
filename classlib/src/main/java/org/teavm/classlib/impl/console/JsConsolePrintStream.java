@@ -15,10 +15,10 @@
  */
 package org.teavm.classlib.impl.console;
 
-import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
+import java.nio.charset.Charset;
 import java.nio.charset.CharsetDecoder;
 import java.nio.charset.CoderResult;
 import java.nio.charset.CodingErrorAction;
@@ -30,7 +30,7 @@ public abstract class JsConsolePrintStream extends PrintStream {
     private Runnable flushAction;
 
     public JsConsolePrintStream() {
-        super(new ByteArrayOutputStream());
+        super(null, false, (Charset) null);
     }
 
     @Override
@@ -117,6 +117,14 @@ public abstract class JsConsolePrintStream extends PrintStream {
     @Override
     public void write(byte[] b, int off, int len) {
         ensureByteEncoder().write(b, off, len);
+    }
+
+    protected void print(char[] s, int begin, int end) {
+        print(new String(s, begin, end));
+    }
+
+    protected void print(CharSequence s, int begin, int end) {
+        print(s.subSequence(begin, end).toString());
     }
 
     @Override

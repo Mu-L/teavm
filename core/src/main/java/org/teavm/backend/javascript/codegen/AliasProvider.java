@@ -30,11 +30,11 @@ public interface AliasProvider {
 
     ScopedName getClassAlias(String className);
 
-    String getFunctionAlias(String name);
+    ScopedName getFunctionAlias(String name);
 
     ScopedName getClassInitAlias(String className);
 
-    String getScopeAlias();
+    String getAdditionalScopeName();
 
     void reserveName(String name);
 }

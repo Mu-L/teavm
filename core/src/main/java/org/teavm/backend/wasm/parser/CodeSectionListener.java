@@ -15,12 +15,7 @@
  */
 package org.teavm.backend.wasm.parser;
 
-import org.teavm.backend.wasm.model.WasmType;
-
-public interface CodeSectionListener {
-    default void sectionStart(int functionCount) {
-    }
-
+public interface CodeSectionListener extends SectionListener {
     default boolean functionStart(int index, int size) {
         return false;
     }
@@ -28,7 +23,7 @@ public interface CodeSectionListener {
     default void localsStart(int count) {
     }
 
-    default void local(int start, int count, WasmType type) {
+    default void local(int start, int count, WasmHollowType type) {
     }
 
     default CodeListener code() {
@@ -36,8 +31,5 @@ public interface CodeSectionListener {
     }
 
     default void functionEnd() {
-    }
-
-    default void sectionEnd() {
     }
 }

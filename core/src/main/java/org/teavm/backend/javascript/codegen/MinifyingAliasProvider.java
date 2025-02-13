@@ -23,27 +23,22 @@ import org.teavm.model.MethodDescriptor;
 import org.teavm.model.MethodReference;
 
 public class MinifyingAliasProvider implements AliasProvider {
-    private int topLevelAliasLimit;
     private static final String startLetters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     private static final String startVirtualLetters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    private final int maxTopLevelNames;
     private int lastSuffix;
-    private int lastScopedSuffix;
-    private int lastVirtual;
+    private int lastInstanceSuffix;
+    private int topLevelNames;
+    private boolean additionalScopeStarted;
     private final Set<String> usedAliases = new HashSet<>();
-    private final Set<String> usedVirtualAliases = new HashSet<>();
-    private final Set<String> usedScopedAliases = new HashSet<>();
 
-    public MinifyingAliasProvider(int topLevelAliasLimit) {
-        this.topLevelAliasLimit = topLevelAliasLimit;
+    public MinifyingAliasProvider(int maxTopLevelNames) {
+        this.maxTopLevelNames = maxTopLevelNames;
     }
 
     @Override
     public String getFieldAlias(FieldReference field) {
-        String result;
-        do {
-            result = RenderingUtil.indexToId(lastVirtual++, startVirtualLetters);
-        } while (!usedVirtualAliases.add(result) || RenderingUtil.KEYWORDS.contains(result));
-        return result;
+        return createInstanceName();
     }
 
     @Override
@@ -58,11 +53,7 @@ public class MinifyingAliasProvider implements AliasProvider {
 
     @Override
     public String getMethodAlias(MethodDescriptor method) {
-        String result;
-        do {
-            result = RenderingUtil.indexToId(lastVirtual++, startVirtualLetters);
-        } while (!usedVirtualAliases.add(result) || RenderingUtil.KEYWORDS.contains(result));
-        return result;
+        return createInstanceName();
     }
 
     @Override
@@ -71,8 +62,8 @@ public class MinifyingAliasProvider implements AliasProvider {
     }
 
     @Override
-    public String getFunctionAlias(String className) {
-        return RenderingUtil.indexToId(lastSuffix++, startLetters);
+    public ScopedName getFunctionAlias(String className) {
+        return createTopLevelName();
     }
 
     @Override
@@ -81,12 +72,8 @@ public class MinifyingAliasProvider implements AliasProvider {
     }
 
     @Override
-    public String getScopeAlias() {
-        String result;
-        do {
-            result = RenderingUtil.indexToId(lastSuffix++, startLetters);
-        } while (!usedAliases.add(result) || RenderingUtil.KEYWORDS.contains(result));
-        return result;
+    public String getAdditionalScopeName() {
+        return createTopLevelName().name;
     }
 
     @Override
@@ -95,18 +82,23 @@ public class MinifyingAliasProvider implements AliasProvider {
     }
 
     private ScopedName createTopLevelName() {
-        if (usedAliases.size() < topLevelAliasLimit) {
-            String result;
-            do {
-                result = RenderingUtil.indexToId(lastSuffix++, startLetters);
-            } while (!usedAliases.add(result) || RenderingUtil.KEYWORDS.contains(result));
-            return new ScopedName(false, result);
-        } else {
-            String result;
-            do {
-                result = RenderingUtil.indexToId(lastScopedSuffix++, startLetters);
-            } while (!usedScopedAliases.add(result) || RenderingUtil.KEYWORDS.contains(result));
-            return new ScopedName(true, result);
+        if (!additionalScopeStarted && topLevelNames >= maxTopLevelNames) {
+            additionalScopeStarted = true;
+            lastSuffix = 0;
         }
+        String result;
+        do {
+            result = RenderingUtil.indexToId(lastSuffix++, startLetters);
+        } while ((!additionalScopeStarted && usedAliases.contains(result)) || RenderingUtil.KEYWORDS.contains(result));
+        ++topLevelNames;
+        return new ScopedName(result, additionalScopeStarted);
+    }
+
+    private String createInstanceName() {
+        String result;
+        do {
+            result = RenderingUtil.indexToId(lastInstanceSuffix++, startVirtualLetters);
+        } while (RenderingUtil.KEYWORDS.contains(result));
+        return result;
     }
 }

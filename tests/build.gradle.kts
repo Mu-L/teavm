@@ -16,6 +16,8 @@
 
 plugins {
     `java-library`
+    alias(libs.plugins.kotlin.jvm)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 description = "Tests"
@@ -38,10 +40,12 @@ dependencies {
     testImplementation(project(":metaprogramming:impl"))
     testImplementation(project(":tools:core"))
     testImplementation(project(":tools:junit"))
+    testImplementation(project(":tools:browser-runner"))
     testImplementation(libs.hppc)
     testImplementation(libs.rhino)
     testImplementation(libs.junit)
     testImplementation(libs.testng)
+    testImplementation(libs.kotlin.serialization.json)
 }
 
 tasks.test {
@@ -50,13 +54,20 @@ tasks.test {
 
     systemProperty("teavm.junit.js", providers.gradleProperty("teavm.tests.js").orElse("true").get())
     systemProperty("teavm.junit.js.runner", browser)
-    systemProperty("teavm.junit.minified", providers.gradleProperty("teavm.tests.minified").orElse("false").get())
+    systemProperty("teavm.junit.minified", providers.gradleProperty("teavm.tests.minified").orElse("true").get())
     systemProperty("teavm.junit.optimized", providers.gradleProperty("teavm.tests.optimized").orElse("true").get())
     systemProperty("teavm.junit.js.decodeStack", providers.gradleProperty("teavm.tests.decodeStack")
             .orElse("false").get())
 
     systemProperty("teavm.junit.wasm", providers.gradleProperty("teavm.tests.wasm").orElse("true").get())
     systemProperty("teavm.junit.wasm.runner", browser)
+    systemProperty("teavm.junit.wasm.disasm", providers.gradleProperty("teavm.tests.wasm.disasm")
+        .orElse("false").get())
+
+    systemProperty("teavm.junit.wasm-gc", providers.gradleProperty("teavm.tests.wasm-gc").orElse("true").get())
+    systemProperty("teavm.junit.wasm-gc.runner", browser)
+    systemProperty("teavm.junit.wasm-gc.disasm", providers.gradleProperty("teavm.tests.wasm-gc.disasm")
+        .orElse("false").get())
 
     systemProperty("teavm.junit.wasi", providers.gradleProperty("teavm.tests.wasi").orElse("true").get())
     systemProperty("teavm.junit.wasi.runner", providers.gradleProperty("teavm.tests.wasi.runner")
@@ -85,4 +96,5 @@ tasks.test {
             .joinToString(File.pathSeparator))
 
     maxParallelForks = (Runtime.getRuntime().availableProcessors() / 2).coerceAtLeast(1)
+    maxHeapSize = "800m"
 }

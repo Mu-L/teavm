@@ -30,7 +30,6 @@ import org.teavm.classlib.impl.console.StderrOutputStream;
 import org.teavm.classlib.impl.console.StdoutOutputStream;
 import org.teavm.classlib.java.io.TConsole;
 import org.teavm.classlib.java.io.TInputStream;
-import org.teavm.classlib.java.io.TOutputStream;
 import org.teavm.classlib.java.io.TPrintStream;
 import org.teavm.classlib.java.lang.reflect.TArray;
 import org.teavm.dependency.PluggableDependency;
@@ -40,7 +39,6 @@ import org.teavm.interop.Import;
 import org.teavm.interop.NoSideEffects;
 import org.teavm.interop.Unmanaged;
 import org.teavm.jso.browser.Performance;
-import org.teavm.runtime.Allocator;
 import org.teavm.runtime.GC;
 import org.teavm.runtime.RuntimeArray;
 import org.teavm.runtime.RuntimeClass;
@@ -57,10 +55,10 @@ public final class TSystem extends TObject {
 
     public static TPrintStream out() {
         if (outCache == null) {
-            if (PlatformDetector.isJavaScript()) {
+            if (PlatformDetector.isJavaScript() || PlatformDetector.isWebAssemblyGC()) {
                 outCache = (TPrintStream) (Object) new JSStdoutPrintStream();
             } else {
-                outCache = new TPrintStream((TOutputStream) (Object) StdoutOutputStream.INSTANCE, false);
+                outCache = new TPrintStream(StdoutOutputStream.INSTANCE, false);
             }
         }
         return outCache;
@@ -68,10 +66,10 @@ public final class TSystem extends TObject {
 
     public static TPrintStream err() {
         if (errCache == null) {
-            if (PlatformDetector.isJavaScript()) {
+            if (PlatformDetector.isJavaScript() || PlatformDetector.isWebAssemblyGC()) {
                 errCache = (TPrintStream) (Object) new JSStderrPrintStream();
             } else {
-                errCache = new TPrintStream((TOutputStream) (Object) StderrOutputStream.INSTANCE, false);
+                errCache = new TPrintStream(StderrOutputStream.INSTANCE, false);
             }
         }
         return errCache;
@@ -157,7 +155,7 @@ public final class TSystem extends TObject {
         Address destAddress = dest.toAddress().add(offset);
         destAddress = destAddress.add(itemSize * destPos);
 
-        Allocator.moveMemoryBlock(srcAddress, destAddress, length * itemSize);
+        Address.moveMemoryBlock(srcAddress, destAddress, length * itemSize);
     }
 
     @DelegateTo("currentTimeMillisLowLevel")

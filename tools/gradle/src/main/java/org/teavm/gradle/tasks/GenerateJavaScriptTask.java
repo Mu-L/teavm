@@ -15,10 +15,13 @@
  */
 package org.teavm.gradle.tasks;
 
+import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.provider.Property;
 import org.gradle.api.tasks.Input;
+import org.gradle.api.tasks.InputFiles;
 import org.gradle.api.tasks.Optional;
-import org.teavm.gradle.api.OptimizationLevel;
+import org.teavm.gradle.api.JSModuleType;
+import org.teavm.gradle.api.SourceFilePolicy;
 import org.teavm.tooling.TeaVMTargetType;
 import org.teavm.tooling.builder.BuildStrategy;
 
@@ -26,7 +29,9 @@ public abstract class GenerateJavaScriptTask extends TeaVMTask {
     public GenerateJavaScriptTask() {
         getObfuscated().convention(true);
         getStrict().convention(false);
+        getModuleType().convention(JSModuleType.UMD);
         getSourceMap().convention(false);
+        getSourceFilePolicy().convention(SourceFilePolicy.LINK_LOCAL_FILES);
         getEntryPointName().convention("main");
     }
 
@@ -40,21 +45,52 @@ public abstract class GenerateJavaScriptTask extends TeaVMTask {
 
     @Input
     @Optional
+    public abstract Property<JSModuleType> getModuleType();
+
+    @Input
+    @Optional
     public abstract Property<Boolean> getSourceMap();
 
     @Input
     @Optional
     public abstract Property<String> getEntryPointName();
 
+    @InputFiles
+    public abstract ConfigurableFileCollection getSourceFiles();
+
+    @Input
+    @Optional
+    public abstract Property<SourceFilePolicy> getSourceFilePolicy();
+
+    @Input
+    @Optional
+    public abstract Property<Integer> getMaxTopLevelNames();
+
     @Override
     protected void setupBuilder(BuildStrategy builder) {
         builder.setTargetType(TeaVMTargetType.JAVASCRIPT);
         builder.setObfuscated(getObfuscated().get());
         builder.setStrict(getStrict().get());
+        if (getMaxTopLevelNames().isPresent()) {
+            builder.setMaxTopLevelNames(getMaxTopLevelNames().get());
+        }
+        switch (getModuleType().get()) {
+            case UMD:
+                builder.setJsModuleType(org.teavm.backend.javascript.JSModuleType.UMD);
+                break;
+            case COMMON_JS:
+                builder.setJsModuleType(org.teavm.backend.javascript.JSModuleType.COMMON_JS);
+                break;
+            case NONE:
+                builder.setJsModuleType(org.teavm.backend.javascript.JSModuleType.NONE);
+                break;
+            case ES2015:
+                builder.setJsModuleType(org.teavm.backend.javascript.JSModuleType.ES2015);
+                break;
+        }
         builder.setSourceMapsFileGenerated(getSourceMap().get());
         builder.setEntryPointName(getEntryPointName().get());
-        if (getOptimization().get() == OptimizationLevel.NONE) {
-            builder.setMaxTopLevelNames(1000);
-        }
+        TaskUtils.applySourceFiles(getSourceFiles(), builder);
+        TaskUtils.applySourceFilePolicy(getSourceFilePolicy(), builder);
     }
 }

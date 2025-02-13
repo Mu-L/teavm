@@ -1,5 +1,5 @@
 /*
- *  Copyright 2019 Alexey Andreev.
+ *  Copyright 2024 konsoletyper.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -16,11 +16,11 @@
 package org.teavm.backend.javascript.codegen;
 
 public class ScopedName {
+    public final String name;
     public final boolean scoped;
-    public final String value;
 
-    public ScopedName(boolean scoped, String value) {
+    public ScopedName(String name, boolean scoped) {
+        this.name = name;
         this.scoped = scoped;
-        this.value = value;
     }
 }

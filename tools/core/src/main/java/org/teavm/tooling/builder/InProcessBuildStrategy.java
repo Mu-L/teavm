@@ -22,14 +22,16 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.List;
 import java.util.Properties;
-import java.util.stream.Collectors;
+import org.teavm.backend.javascript.JSModuleType;
+import org.teavm.backend.wasm.WasmDebugInfoLevel;
+import org.teavm.backend.wasm.WasmDebugInfoLocation;
 import org.teavm.backend.wasm.render.WasmBinaryVersion;
 import org.teavm.callgraph.CallGraph;
 import org.teavm.diagnostics.ProblemProvider;
 import org.teavm.tooling.EmptyTeaVMToolLog;
+import org.teavm.tooling.TeaVMSourceFilePolicy;
 import org.teavm.tooling.TeaVMTargetType;
 import org.teavm.tooling.TeaVMTool;
 import org.teavm.tooling.TeaVMToolException;
@@ -52,16 +54,22 @@ public class InProcessBuildStrategy implements BuildStrategy {
     private TeaVMOptimizationLevel optimizationLevel = TeaVMOptimizationLevel.ADVANCED;
     private boolean fastDependencyAnalysis;
     private boolean obfuscated;
+    private JSModuleType jsModuleType;
     private boolean strict;
-    private int maxTopLevelNames = 1000000;
+    private int maxTopLevelNames = 80_000;
     private boolean sourceMapsFileGenerated;
     private boolean debugInformationGenerated;
-    private boolean sourceFilesCopied;
+    private TeaVMSourceFilePolicy sourceMapsSourcePolicy;
     private String[] transformers = new String[0];
     private String[] classesToPreserve = new String[0];
     private WasmBinaryVersion wasmVersion = WasmBinaryVersion.V_0x1;
+    private boolean wasmExceptionsUsed;
+    private WasmDebugInfoLevel wasmDebugInfoLevel;
+    private WasmDebugInfoLocation wasmDebugInfoLocation;
     private int minHeapSize = 4 * 1024 * 1024;
     private int maxHeapSize = 128 * 1024 * 1024;
+    private int minDirectBuffersSize = 2 * 1024 * 1024;
+    private int maxDirectBuffersSize = 32 * 1024 * 1024;
     private final List<SourceFileProvider> sourceFileProviders = new ArrayList<>();
     private boolean heapDump;
     private TeaVMProgressListener progressListener;
@@ -123,7 +131,17 @@ public class InProcessBuildStrategy implements BuildStrategy {
 
     @Override
     public void setSourceFilesCopied(boolean sourceFilesCopied) {
-        this.sourceFilesCopied = sourceFilesCopied;
+        if ((sourceMapsSourcePolicy == TeaVMSourceFilePolicy.COPY) == sourceFilesCopied) {
+            return;
+        }
+        sourceMapsSourcePolicy = sourceFilesCopied
+                ? TeaVMSourceFilePolicy.COPY
+                : TeaVMSourceFilePolicy.DO_NOTHING;
+    }
+
+    @Override
+    public void setSourceFilePolicy(TeaVMSourceFilePolicy sourceFilePolicy) {
+        this.sourceMapsSourcePolicy = sourceFilePolicy;
     }
 
     @Override
@@ -155,6 +173,11 @@ public class InProcessBuildStrategy implements BuildStrategy {
     @Override
     public void setStrict(boolean strict) {
         this.strict = strict;
+    }
+
+    @Override
+    public void setJsModuleType(JSModuleType jsModuleType) {
+        this.jsModuleType = jsModuleType;
     }
 
     @Override
@@ -198,6 +221,21 @@ public class InProcessBuildStrategy implements BuildStrategy {
     }
 
     @Override
+    public void setWasmExceptionsUsed(boolean wasmExceptionsUsed) {
+        this.wasmExceptionsUsed = wasmExceptionsUsed;
+    }
+
+    @Override
+    public void setWasmDebugInfoLevel(WasmDebugInfoLevel wasmDebugInfoLevel) {
+        this.wasmDebugInfoLevel = wasmDebugInfoLevel;
+    }
+
+    @Override
+    public void setWasmDebugInfoLocation(WasmDebugInfoLocation wasmDebugInfoLocation) {
+        this.wasmDebugInfoLocation = wasmDebugInfoLocation;
+    }
+
+    @Override
     public void setMinHeapSize(int minHeapSize) {
         this.minHeapSize = minHeapSize;
     }
@@ -205,6 +243,16 @@ public class InProcessBuildStrategy implements BuildStrategy {
     @Override
     public void setMaxHeapSize(int maxHeapSize) {
         this.maxHeapSize = maxHeapSize;
+    }
+
+    @Override
+    public void setMinDirectBuffersSize(int minDirectBuffersSize) {
+        this.minDirectBuffersSize = minDirectBuffersSize;
+    }
+
+    @Override
+    public void setMaxDirectBuffersSize(int maxDirectBuffersSize) {
+        this.maxDirectBuffersSize = maxDirectBuffersSize;
     }
 
     @Override
@@ -239,9 +287,10 @@ public class InProcessBuildStrategy implements BuildStrategy {
 
         tool.setSourceMapsFileGenerated(sourceMapsFileGenerated);
         tool.setDebugInformationGenerated(debugInformationGenerated);
-        tool.setSourceFilesCopied(sourceFilesCopied);
+        tool.setSourceFilePolicy(sourceMapsSourcePolicy);
 
         tool.setObfuscated(obfuscated);
+        tool.setJsModuleType(jsModuleType);
         tool.setStrict(strict);
         tool.setMaxTopLevelNames(maxTopLevelNames);
         tool.setIncremental(incremental);
@@ -249,8 +298,13 @@ public class InProcessBuildStrategy implements BuildStrategy {
         tool.getClassesToPreserve().addAll(Arrays.asList(classesToPreserve));
         tool.setCacheDirectory(cacheDirectory != null ? new File(cacheDirectory) : null);
         tool.setWasmVersion(wasmVersion);
+        tool.setWasmExceptionsUsed(wasmExceptionsUsed);
+        tool.setWasmDebugInfoLevel(wasmDebugInfoLevel);
+        tool.setWasmDebugInfoLocation(wasmDebugInfoLocation);
         tool.setMinHeapSize(minHeapSize);
         tool.setMaxHeapSize(maxHeapSize);
+        tool.setMinDirectBuffersSize(minDirectBuffersSize);
+        tool.setMaxDirectBuffersSize(maxDirectBuffersSize);
         tool.setHeapDump(heapDump);
         tool.setShortFileNames(shortFileNames);
         tool.setAssertionsRemoved(assertionsRemoved);
@@ -268,12 +322,8 @@ public class InProcessBuildStrategy implements BuildStrategy {
             throw new BuildException(e);
         }
 
-        var generatedFiles = tool.getGeneratedFiles().stream()
-                .map(File::getAbsolutePath)
-                .collect(Collectors.toSet());
-
         return new InProcessBuildResult(tool.getDependencyInfo().getCallGraph(),
-                tool.getProblemProvider(), tool.getClasses(), tool.getUsedResources(), generatedFiles);
+                tool.getProblemProvider());
     }
 
     private URLClassLoader buildClassLoader() {
@@ -291,17 +341,10 @@ public class InProcessBuildStrategy implements BuildStrategy {
     static class InProcessBuildResult implements BuildResult {
         private CallGraph callGraph;
         private ProblemProvider problemProvider;
-        private Collection<String> classes;
-        private Collection<String> usedResources;
-        private Collection<String> generatedFiles;
 
-        InProcessBuildResult(CallGraph callGraph, ProblemProvider problemProvider,
-                Collection<String> classes, Collection<String> usedResources, Collection<String> generatedFiles) {
+        InProcessBuildResult(CallGraph callGraph, ProblemProvider problemProvider) {
             this.callGraph = callGraph;
             this.problemProvider = problemProvider;
-            this.classes = classes;
-            this.usedResources = usedResources;
-            this.generatedFiles = generatedFiles;
         }
 
         @Override
@@ -312,21 +355,6 @@ public class InProcessBuildStrategy implements BuildStrategy {
         @Override
         public ProblemProvider getProblems() {
             return problemProvider;
-        }
-
-        @Override
-        public Collection<String> getClasses() {
-            return classes;
-        }
-
-        @Override
-        public Collection<String> getUsedResources() {
-            return usedResources;
-        }
-
-        @Override
-        public Collection<String> getGeneratedFiles() {
-            return generatedFiles;
         }
     }
 }

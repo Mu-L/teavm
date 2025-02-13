@@ -15,6 +15,7 @@
  */
 package org.teavm.classlib.java.lang;
 
+import org.teavm.backend.wasm.runtime.gc.WasmGCSupport;
 import org.teavm.classlib.PlatformDetector;
 import org.teavm.dependency.PluggableDependency;
 import org.teavm.interop.Address;
@@ -185,6 +186,10 @@ public class TObject {
         if (monitor == null) {
             return true;
         }
+        if (PlatformDetector.isWebAssemblyGC()) {
+            // TODO: fix Monitor implementation and remove this block
+            return monitor.owner == null;
+        }
         if (monitor.owner == null
                 && (monitor.enteringThreads == null || monitor.enteringThreads.isEmpty())
                 && (monitor.notifyListeners == null || monitor.notifyListeners.isEmpty())) {
@@ -246,7 +251,22 @@ public class TObject {
     }
 
     final int identity() {
-        if (PlatformDetector.isLowLevel()) {
+        if (PlatformDetector.isWebAssemblyGC()) {
+            var identity = wasmGCIdentity();
+            if (identity < 0) {
+                var monitor = this.monitor;
+                if (monitor != null) {
+                    if (monitor.id < 0) {
+                        monitor.id = WasmGCSupport.nextObjectId() & 0x7ffffff;
+                    }
+                    return monitor.id;
+                } else {
+                    identity = WasmGCSupport.nextObjectId() & 0x7ffffff;
+                    setWasmGCIdentity(identity);
+                }
+            }
+            return identity;
+        } else if (PlatformDetector.isLowLevel()) {
             Monitor monitor = this.monitor;
             if (monitor == null) {
                 int hashCode = hashCodeLowLevel(this);
@@ -270,6 +290,10 @@ public class TObject {
         }
         return Platform.getPlatformObject(this).getId();
     }
+
+    private native int wasmGCIdentity();
+
+    private native void setWasmGCIdentity(int identity);
 
     @DelegateTo("hashCodeLowLevelImpl")
     @NoSideEffects
@@ -323,6 +347,9 @@ public class TObject {
     @DelegateTo("cloneLowLevel")
     @PluggableDependency(ObjectDependencyPlugin.class)
     protected Object clone() throws TCloneNotSupportedException {
+        if (PlatformDetector.isWebAssemblyGC()) {
+            return cloneObject();
+        }
         if (!(this instanceof TCloneable) && Platform.getPlatformObject(this)
                 .getPlatformClass().getMetadata().getArrayItem() == null) {
             throw new TCloneNotSupportedException();
@@ -331,6 +358,8 @@ public class TObject {
         Platform.getPlatformObject(result).setId(Platform.nextObjectId());
         return result;
     }
+
+    private native TObject cloneObject();
 
     @SuppressWarnings("unused")
     private static RuntimeObject cloneLowLevel(RuntimeObject self) {
@@ -349,7 +378,7 @@ public class TObject {
             size = itemSize * array.size + headerSize.toInt();
         }
         if (size > skip) {
-            Allocator.moveMemoryBlock(self.toAddress().add(skip), copy.toAddress().add(skip), size - skip);
+            Address.moveMemoryBlock(self.toAddress().add(skip), copy.toAddress().add(skip), size - skip);
         }
         return copy;
     }

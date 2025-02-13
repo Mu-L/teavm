@@ -21,6 +21,7 @@ import org.junit.runner.RunWith;
 import org.teavm.jso.JSBody;
 import org.teavm.jso.JSIndexer;
 import org.teavm.jso.JSObject;
+import org.teavm.junit.AttachJavaScript;
 import org.teavm.junit.EachTestCompiledSeparately;
 import org.teavm.junit.OnlyPlatform;
 import org.teavm.junit.SkipJVM;
@@ -29,7 +30,7 @@ import org.teavm.junit.TestPlatform;
 
 @RunWith(TeaVMTestRunner.class)
 @SkipJVM
-@OnlyPlatform(TestPlatform.JAVASCRIPT)
+@OnlyPlatform({TestPlatform.JAVASCRIPT, TestPlatform.WEBASSEMBLY_GC})
 @EachTestCompiledSeparately
 public class ImportClassTest {
     @Test
@@ -39,6 +40,46 @@ public class ImportClassTest {
         set(o, "bar", 42);
         assertEquals(23, o.get("foo"));
         assertEquals(42, o.get("bar"));
+    }
+
+    @Test
+    @AttachJavaScript("org/teavm/jso/test/classWithConstructor.js")
+    public void constructor() {
+        var o = new ClassWithConstructor();
+        assertEquals(99, o.getFoo());
+        assertEquals("bar called", o.bar());
+
+        o = new ClassWithConstructor(23);
+        assertEquals(23, o.getFoo());
+    }
+
+    @Test
+    @AttachJavaScript("org/teavm/jso/test/classWithConstructor.js")
+    public void staticMethod() {
+        assertEquals("static method called", ClassWithConstructor.staticMethod());
+    }
+
+    @Test
+    @AttachJavaScript("org/teavm/jso/test/classWithConstructor.js")
+    public void topLevel() {
+        assertEquals("top level", ClassWithConstructor.topLevelFunction());
+        assertEquals("top level prop", ClassWithConstructor.getTopLevelProperty());
+
+        ClassWithConstructor.setTopLevelProperty("update");
+        assertEquals("update", ClassWithConstructor.getTopLevelProperty());
+
+        assertEquals("top level", TopLevelDeclarations.topLevelFunction());
+        assertEquals("update", TopLevelDeclarations.getTopLevelProperty());
+
+        TopLevelDeclarations.setTopLevelProperty("update2");
+        assertEquals("update2", ClassWithConstructor.getTopLevelProperty());
+    }
+
+    @Test
+    @AttachJavaScript("org/teavm/jso/test/classWithConstructor.js")
+    public void legacyCastMethod() {
+        SubclassWithConstructor o = ClassWithConstructor.createClass(true).cast();
+        assertEquals("subclass", o.baz());
     }
 
     @JSBody(script = "return {};")

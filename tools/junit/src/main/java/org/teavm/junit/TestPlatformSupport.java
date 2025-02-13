@@ -18,6 +18,8 @@ package org.teavm.junit;
 import static org.teavm.junit.TestUtil.resourceToFile;
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.AnnotatedElement;
+import java.lang.reflect.Method;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
@@ -45,6 +47,8 @@ abstract class TestPlatformSupport<T extends TeaVMTarget> {
         this.referenceCache = referenceCache;
     }
 
+    abstract boolean isEnabled();
+
     abstract TestRunStrategy createRunStrategy(File outputDir);
 
     abstract TestPlatform getPlatform();
@@ -56,7 +60,7 @@ abstract class TestPlatformSupport<T extends TeaVMTarget> {
     abstract List<TeaVMTestConfiguration<T>> getConfigurations();
 
     abstract CompileResult compile(Consumer<TeaVM> additionalProcessing, String baseName,
-            TeaVMTestConfiguration<T> configuration, File path);
+            TeaVMTestConfiguration<T> configuration, File path, AnnotatedElement element);
 
     abstract boolean usesFileName();
 
@@ -81,6 +85,7 @@ abstract class TestPlatformSupport<T extends TeaVMTarget> {
                     .setClassSource(classSource)
                     .setReferenceCache(referenceCache)
                     .setDependencyAnalyzerFactory(dependencyAnalyzerFactory)
+                    .setStrict(true)
                     .build();
 
             configuration.apply(vm);
@@ -89,7 +94,7 @@ abstract class TestPlatformSupport<T extends TeaVMTarget> {
 
             new TestExceptionPlugin().install(vm);
 
-            vm.entryPoint(entryPoint);
+            vm.setEntryPoint(entryPoint);
 
             if (usesFileName()) {
                 if (!outputFile.getParentFile().exists()) {
@@ -118,17 +123,19 @@ abstract class TestPlatformSupport<T extends TeaVMTarget> {
         }
     }
 
-    private File getOutputFile(File path, String baseName, String suffix, String extension) {
+    protected final File getOutputFile(File path, String baseName, String suffix, String extension) {
+        return new File(path, getOutputSimpleNameFile(baseName, suffix, extension));
+    }
+
+
+    protected final String getOutputSimpleNameFile(String baseName, String suffix, String extension) {
         StringBuilder simpleName = new StringBuilder();
         simpleName.append(baseName);
         if (!suffix.isEmpty()) {
             simpleName.append('-').append(suffix);
         }
-        File outputFile;
         simpleName.append(extension);
-        outputFile = new File(path, simpleName.toString());
-
-        return outputFile;
+        return simpleName.toString();
     }
 
     private String buildErrorMessage(TeaVM vm) {
@@ -151,6 +158,9 @@ abstract class TestPlatformSupport<T extends TeaVMTarget> {
 
     void additionalSingleTestOutput(File outputPathForMethod, TeaVMTestConfiguration<?> configuration,
             MethodReference reference) {
+    }
+
+    void additionalOutputForAllConfigurations(File outputPath, Method method) {
     }
 
     protected final void htmlOutput(File outputPath, File outputPathForMethod, TeaVMTestConfiguration<?> configuration,

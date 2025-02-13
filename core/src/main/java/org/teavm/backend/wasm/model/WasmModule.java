@@ -17,43 +17,30 @@ package org.teavm.backend.wasm.model;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import org.teavm.backend.wasm.model.expression.WasmDefaultExpressionVisitor;
+import org.teavm.backend.wasm.model.expression.WasmGetGlobal;
+import org.teavm.common.Graph;
+import org.teavm.common.GraphUtils;
 
 public class WasmModule {
     private int minMemorySize;
     private int maxMemorySize;
     private List<WasmMemorySegment> segments = new ArrayList<>();
-    private Map<String, WasmFunction> functions = new LinkedHashMap<>();
-    private Map<String, WasmFunction> readonlyFunctions = Collections.unmodifiableMap(functions);
     private List<WasmFunction> functionTable = new ArrayList<>();
     private WasmFunction startFunction;
     private Map<String, WasmCustomSection> customSections = new LinkedHashMap<>();
     private Map<String, WasmCustomSection> readonlyCustomSections = Collections.unmodifiableMap(customSections);
 
-    public void add(WasmFunction function) {
-        if (functions.containsKey(function.getName())) {
-            throw new IllegalArgumentException("Function " + function.getName() + " already defined in this module");
-        }
-        if (function.module != null) {
-            throw new IllegalArgumentException("Given function is already registered in another module");
-        }
-        functions.put(function.getName(), function);
-        function.module = this;
-    }
-
-    public void remove(WasmFunction function) {
-        if (function.getModule() != this) {
-            return;
-        }
-        function.module = null;
-        functions.remove(function.getName());
-    }
-
-    public Map<String, WasmFunction> getFunctions() {
-        return readonlyFunctions;
-    }
+    public final WasmCollection<WasmFunction> functions = new WasmCollection<>();
+    public final WasmCollection<WasmGlobal> globals = new WasmCollection<>();
+    public final WasmCollection<WasmCompositeType> types = new WasmCollection<>();
+    public final WasmCollection<WasmTag> tags = new WasmCollection<>();
+    public String memoryExportName = "memory";
 
     public void add(WasmCustomSection customSection) {
         if (customSections.containsKey(customSection.getName())) {
@@ -109,5 +96,135 @@ public class WasmModule {
 
     public void setStartFunction(WasmFunction startFunction) {
         this.startFunction = startFunction;
+    }
+
+    public void prepareForRendering() {
+        prepareGlobals();
+        prepareTypes();
+    }
+
+    private void prepareGlobals() {
+        var sorting = new GlobalSorting();
+        sorting.sort(globals);
+        globals.clear();
+        for (var global : sorting.sorted) {
+            globals.add(global);
+        }
+    }
+
+    private static class GlobalSorting extends WasmDefaultExpressionVisitor {
+        List<WasmGlobal> sorted = new ArrayList<>();
+        private Set<WasmGlobal> visited = new HashSet<>();
+
+        void sort(Iterable<WasmGlobal> globals) {
+            for (var global : globals) {
+                add(global);
+            }
+        }
+
+        private void add(WasmGlobal global) {
+            if (!visited.add(global)) {
+                return;
+            }
+            global.getInitialValue().acceptVisitor(this);
+            sorted.add(global);
+        }
+
+        @Override
+        public void visit(WasmGetGlobal expression) {
+            super.visit(expression);
+            add(expression.getGlobal());
+        }
+    }
+
+    private void prepareTypes() {
+        var typeGraph = WasmTypeGraphBuilder.buildTypeGraph(this, types, types.size());
+        var sccs = GraphUtils.findStronglyConnectedComponents(typeGraph);
+        var sccStartNode = new int[types.size()];
+        for (var i = 0; i < sccStartNode.length; ++i) {
+            sccStartNode[i] = i;
+        }
+        var sccsByIndex = new int[types.size()][];
+        for (var scc : sccs) {
+            sccsByIndex[scc[0]] = scc;
+            for (var i = 0; i < scc.length; i++) {
+                sccStartNode[scc[i]] = sccStartNode[scc[0]];
+            }
+        }
+
+        var sorting = new TypeSorting();
+        sorting.original = types;
+        sorting.graph = typeGraph;
+        sorting.visited = new boolean[types.size()];
+        sorting.sccVisited = new boolean[types.size()];
+        sorting.sccMap = sccStartNode;
+        sorting.sccsByIndex = sccsByIndex;
+        for (var i = 0; i < types.size(); ++i) {
+            sorting.visit(i);
+        }
+
+        types.clear();
+        for (var type : sorting.sorted) {
+            types.add(type);
+        }
+    }
+
+    private static class TypeSorting {
+        WasmCollection<WasmCompositeType> original;
+        Graph graph;
+        boolean[] visited;
+        boolean[] sccVisited;
+        int[] sccMap;
+        int[][] sccsByIndex;
+        List<WasmCompositeType> sorted = new ArrayList<>();
+
+        void visit(int typeIndex) {
+            typeIndex = sccMap[typeIndex];
+            if (visited[typeIndex]) {
+                return;
+            }
+            var scc = sccsByIndex[typeIndex];
+            if (scc == null) {
+                visited[typeIndex] = true;
+                for (var outgoing : graph.outgoingEdges(typeIndex)) {
+                    visit(outgoing);
+                }
+                sorted.add(original.get(typeIndex));
+            } else {
+                visited[typeIndex] = true;
+                for (var index : scc) {
+                    for (var outgoing : graph.outgoingEdges(index)) {
+                        visit(outgoing);
+                    }
+                }
+                var indexOfFirst = sorted.size();
+                for (var index : scc) {
+                    visitScc(index, typeIndex);
+                }
+                sorted.get(indexOfFirst).recursiveTypeCount = scc.length;
+            }
+        }
+
+        void visitScc(int index, int sccBase) {
+            if (sccVisited[index]) {
+                return;
+            }
+            sccVisited[index] = true;
+            var type = original.get(index);
+            if (type instanceof WasmStructure) {
+                var supertype = ((WasmStructure) type).getSupertype();
+                if (supertype != null && sccMap[supertype.index] == sccBase) {
+                    visitScc(supertype.index, sccBase);
+                }
+            } else if (type instanceof WasmFunctionType) {
+                var supertypes = ((WasmFunctionType) type).getSupertypes();
+                for (var supertype : supertypes) {
+                    if (sccMap[supertype.index] == sccBase) {
+                        visitScc(supertype.index, sccBase);
+                    }
+                }
+            }
+            sorted.add(type);
+        }
     }
 }

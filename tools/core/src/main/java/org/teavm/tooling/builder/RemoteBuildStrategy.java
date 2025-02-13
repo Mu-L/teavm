@@ -17,14 +17,17 @@ package org.teavm.tooling.builder;
 
 import java.rmi.RemoteException;
 import java.rmi.server.UnicastRemoteObject;
-import java.util.Collection;
 import java.util.List;
 import java.util.Properties;
+import org.teavm.backend.javascript.JSModuleType;
+import org.teavm.backend.wasm.WasmDebugInfoLevel;
+import org.teavm.backend.wasm.WasmDebugInfoLocation;
 import org.teavm.backend.wasm.render.WasmBinaryVersion;
 import org.teavm.callgraph.CallGraph;
 import org.teavm.diagnostics.Problem;
 import org.teavm.diagnostics.ProblemProvider;
 import org.teavm.tooling.EmptyTeaVMToolLog;
+import org.teavm.tooling.TeaVMSourceFilePolicy;
 import org.teavm.tooling.TeaVMTargetType;
 import org.teavm.tooling.TeaVMToolLog;
 import org.teavm.tooling.daemon.RemoteBuildCallback;
@@ -100,7 +103,14 @@ public class RemoteBuildStrategy implements BuildStrategy {
 
     @Override
     public void setSourceFilesCopied(boolean sourceFilesCopied) {
-        request.sourceFilesCopied = sourceFilesCopied;
+        request.sourceFilePolicy = sourceFilesCopied
+                ? TeaVMSourceFilePolicy.COPY.name()
+                : TeaVMSourceFilePolicy.DO_NOTHING.name();
+    }
+
+    @Override
+    public void setSourceFilePolicy(TeaVMSourceFilePolicy sourceFilePolicy) {
+        request.sourceFilePolicy = sourceFilePolicy.name();
     }
 
     @Override
@@ -132,6 +142,11 @@ public class RemoteBuildStrategy implements BuildStrategy {
     @Override
     public void setStrict(boolean strict) {
         request.strict = strict;
+    }
+
+    @Override
+    public void setJsModuleType(JSModuleType jsModuleType) {
+        request.jsModuleType = jsModuleType;
     }
 
     @Override
@@ -175,6 +190,21 @@ public class RemoteBuildStrategy implements BuildStrategy {
     }
 
     @Override
+    public void setWasmExceptionsUsed(boolean wasmExceptionsUsed) {
+        request.wasmExceptionsUsed = wasmExceptionsUsed;
+    }
+
+    @Override
+    public void setWasmDebugInfoLevel(WasmDebugInfoLevel wasmDebugInfoLevel) {
+        request.wasmDebugInfoLevel = wasmDebugInfoLevel;
+    }
+
+    @Override
+    public void setWasmDebugInfoLocation(WasmDebugInfoLocation wasmDebugInfoLocation) {
+        request.wasmDebugInfoLocation = wasmDebugInfoLocation;
+    }
+
+    @Override
     public void setMinHeapSize(int minHeapSize) {
         request.minHeapSize = minHeapSize;
     }
@@ -182,6 +212,16 @@ public class RemoteBuildStrategy implements BuildStrategy {
     @Override
     public void setMaxHeapSize(int maxHeapSize) {
         request.maxHeapSize = maxHeapSize;
+    }
+
+    @Override
+    public void setMinDirectBuffersSize(int minDirectBuffersSize) {
+        request.minDirectBuffersSize = minDirectBuffersSize;
+    }
+
+    @Override
+    public void setMaxDirectBuffersSize(int maxDirectBuffersSize) {
+        request.maxDirectBuffersSize = maxDirectBuffersSize;
     }
 
     @Override
@@ -231,21 +271,6 @@ public class RemoteBuildStrategy implements BuildStrategy {
             @Override
             public ProblemProvider getProblems() {
                 return problems;
-            }
-
-            @Override
-            public Collection<String> getUsedResources() {
-                return response.usedResources;
-            }
-
-            @Override
-            public Collection<String> getClasses() {
-                return response.classes;
-            }
-
-            @Override
-            public Collection<String> getGeneratedFiles() {
-                return response.generatedFiles;
             }
         };
     }

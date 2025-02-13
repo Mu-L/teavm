@@ -221,9 +221,11 @@ class DependencyGraphBuilder {
         }
 
         @Override
-        public void cast(VariableReader receiver, VariableReader value, ValueType targetType) {
-            super.cast(receiver, value, targetType);
-            currentExceptionConsumer.consume(dependencyAnalyzer.getType("java.lang.ClassCastException"));
+        public void cast(VariableReader receiver, VariableReader value, ValueType targetType, boolean weak) {
+            super.cast(receiver, value, targetType, weak);
+            if (!weak) {
+                currentExceptionConsumer.consume(dependencyAnalyzer.getType("java.lang.ClassCastException"));
+            }
             DependencyNode valueNode = nodes[value.getIndex()];
             DependencyNode receiverNode = nodes[receiver.getIndex()];
             ClassReaderSource classSource = dependencyAnalyzer.getClassSource();
@@ -475,7 +477,8 @@ class DependencyGraphBuilder {
                 if (cls != null && cls.getParent() != null) {
                     receiverNode.getClassValueNode().propagate(dependencyAnalyzer.getType(cls.getParent()));
                 }
-                methodDep.getVariable(0).propagate(type);
+                methodDep.getVariable(0).getClassValueNode().propagate(type);
+                methodDep.getVariable(0).propagate(dependencyAnalyzer.getType("java.lang.Class"));
             });
         }
 

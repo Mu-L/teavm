@@ -15,74 +15,107 @@
  */
 package org.teavm.jso.typedarrays;
 
+import java.nio.Buffer;
 import org.teavm.jso.JSBody;
+import org.teavm.jso.JSBuffer;
+import org.teavm.jso.JSBufferType;
+import org.teavm.jso.JSClass;
 
-public abstract class DataView extends ArrayBufferView {
-    public abstract byte getInt8(int byteOffset);
+@JSClass
+public class DataView extends ArrayBufferView {
+    public DataView(ArrayBuffer buffer) {
+    }
 
-    public abstract short getUint8(int byteOffset);
+    public DataView(ArrayBuffer buffer, int offset, int length) {
+    }
 
-    public abstract short getInt16(int byteOffset);
+    public DataView(ArrayBuffer buffer, int offset) {
+    }
 
-    public abstract short getInt16(int byteOffset, boolean littleEndian);
+    public native byte getInt8(int byteOffset);
 
-    public abstract int getUint16(int byteOffset);
+    public native short getUint8(int byteOffset);
 
-    public abstract int getUint16(int byteOffset, boolean littleEndian);
+    public native short getInt16(int byteOffset);
 
-    public abstract int getInt32(int byteOffset);
+    public native short getInt16(int byteOffset, boolean littleEndian);
 
-    public abstract int getInt32(int byteOffset, boolean littleEndian);
+    public native int getUint16(int byteOffset);
 
-    public abstract int getUint32(int byteOffset);
+    public native int getUint16(int byteOffset, boolean littleEndian);
 
-    public abstract int getUint32(int byteOffset, boolean littleEndian);
+    public native int getInt32(int byteOffset);
 
-    public abstract float getFloat32(int byteOffset);
+    public native int getInt32(int byteOffset, boolean littleEndian);
 
-    public abstract float getFloat32(int byteOffset, boolean littleEndian);
+    public native int getUint32(int byteOffset);
 
-    public abstract double getFloat64(int byteOffset);
+    public native int getUint32(int byteOffset, boolean littleEndian);
 
-    public abstract double getFloat64(int byteOffset, boolean littleEndian);
+    public native long getBigInt64(int byteOffset);
 
-    public abstract void setInt8(int byteOffset, int value);
+    public native long getBigInt64(int byteOffset, boolean littleEndian);
 
-    public abstract void setUint8(int byteOffset, int value);
+    public native long getBigUint64(int byteOffset);
 
-    public abstract void setInt16(int byteOffset, int value);
+    public native long getBigUint64(int byteOffset, boolean littleEndian);
 
-    public abstract void setInt16(int byteOffset, int value, boolean littleEndian);
+    public native float getFloat32(int byteOffset);
 
-    public abstract void setUint16(int byteOffset, int value);
+    public native float getFloat32(int byteOffset, boolean littleEndian);
 
-    public abstract void setUint16(int byteOffset, int value, boolean littleEndian);
+    public native double getFloat64(int byteOffset);
 
-    public abstract void setInt32(int byteOffset, int value);
+    public native double getFloat64(int byteOffset, boolean littleEndian);
 
-    public abstract void setInt32(int byteOffset, int value, boolean littleEndian);
+    public native void setInt8(int byteOffset, int value);
 
-    public abstract void setUint32(int byteOffset, int value);
+    public native void setUint8(int byteOffset, int value);
 
-    public abstract void setUint32(int byteOffset, int value, boolean littleEndian);
+    public native void setInt16(int byteOffset, int value);
 
-    public abstract void setFloat32(int byteOffset, float value);
+    public native void setInt16(int byteOffset, int value, boolean littleEndian);
 
-    public abstract void setFloat32(int byteOffset, float value, boolean littleEndian);
+    public native void setUint16(int byteOffset, int value);
 
-    public abstract void setFloat64(int byteOffset, double value);
+    public native void setUint16(int byteOffset, int value, boolean littleEndian);
 
-    public abstract void setFloat64(int byteOffset, double value, boolean littleEndian);
+    public native void setInt32(int byteOffset, int value);
+
+    public native void setInt32(int byteOffset, int value, boolean littleEndian);
+
+    public native void setBigInt64(int byteOffset, long value);
+
+    public native void setBigInt64(int byteOffset, long value, boolean littleEndian);
+
+    public native void setBigUint64(int byteOffset, long value);
+
+    public native void setBigUint64(int byteOffset, long value, boolean littleEndian);
+
+    public native void setUint32(int byteOffset, int value);
+
+    public native void setUint32(int byteOffset, int value, boolean littleEndian);
+
+    public native void setFloat32(int byteOffset, float value);
+
+    public native void setFloat32(int byteOffset, float value, boolean littleEndian);
+
+    public native void setFloat64(int byteOffset, double value);
+
+    public native void setFloat64(int byteOffset, double value, boolean littleEndian);
 
     @JSBody(params = "buffer", script = "return new DataView(buffer);")
+    @Deprecated
     public static native DataView create(ArrayBuffer buffer);
 
-    @JSBody(params = "buffer", script = "return new DataView(buffer);")
-    public static native DataView create(ArrayBufferView buffer);
-
     @JSBody(params = { "buffer", "offset", "length" }, script = "return new DataView(buffer, offset, length);")
+    @Deprecated
     public static native DataView create(ArrayBuffer buffer, int offset, int length);
 
     @JSBody(params = { "buffer", "offset" }, script = "return new DataView(buffer, offset);")
+    @Deprecated
     public static native DataView create(ArrayBuffer buffer, int offset);
+
+    @JSBody(params = "buffer", script = "return buffer;")
+    public static native DataView fromJavaBuffer(@JSBuffer(JSBufferType.DATA_VIEW) Buffer buffer);
 }

@@ -15,11 +15,15 @@
  */
 package org.teavm.jso;
 
+import org.teavm.interop.Import;
+
 public final class JSExceptions {
     private JSExceptions() {
     }
 
+    @Import(name = "getJavaException", module = "teavmJso")
     public static native Throwable getJavaException(JSObject e);
 
+    @Import(name = "getJSException", module = "teavmJso")
     public static native JSObject getJSException(Throwable e);
 }

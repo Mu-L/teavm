@@ -23,9 +23,10 @@ import java.lang.annotation.Target;
 /**
  * <p>Marks parameters of JavaScript methods that should be passed by reference.
  * This annotation is only applicable to parameters of array type. More specifically:
- * to: byte[], short[], char[], int[], float[], double[] or T[], where T is JSObject.</p>
+ * to: byte[], short[], char[], int[], float[], double[].</p>
  */
 @Retention(RetentionPolicy.RUNTIME)
 @Target({ ElementType.PARAMETER, ElementType.METHOD })
 public @interface JSByRef {
+    boolean optional() default false;
 }

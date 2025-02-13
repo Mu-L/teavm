@@ -20,6 +20,10 @@ public interface WasmExpressionVisitor {
 
     void visit(WasmBranch expression);
 
+    void visit(WasmNullBranch expression);
+
+    void visit(WasmCastBranch expression);
+
     void visit(WasmBreak expression);
 
     void visit(WasmSwitch expression);
@@ -38,9 +42,17 @@ public interface WasmExpressionVisitor {
 
     void visit(WasmFloat64Constant expression);
 
+    void visit(WasmNullConstant expression);
+
+    void visit(WasmIsNull expression);
+
     void visit(WasmGetLocal expression);
 
     void visit(WasmSetLocal expression);
+
+    void visit(WasmGetGlobal expression);
+
+    void visit(WasmSetGlobal expression);
 
     void visit(WasmIntBinary expression);
 
@@ -55,6 +67,8 @@ public interface WasmExpressionVisitor {
     void visit(WasmCall expression);
 
     void visit(WasmIndirectCall expression);
+
+    void visit(WasmCallReference expression);
 
     void visit(WasmDrop expression);
 
@@ -79,4 +93,42 @@ public interface WasmExpressionVisitor {
     void visit(WasmFill expression);
 
     void visit(WasmCopy expression);
+
+    void visit(WasmTry expression);
+
+    void visit(WasmThrow expression);
+
+    void visit(WasmReferencesEqual expression);
+
+    void visit(WasmCast expression);
+
+    void visit(WasmExternConversion expression);
+
+    void visit(WasmTest expression);
+
+    void visit(WasmStructNew expression);
+
+    void visit(WasmStructNewDefault expression);
+
+    void visit(WasmStructGet expression);
+
+    void visit(WasmStructSet expression);
+
+    void visit(WasmArrayNewDefault expression);
+
+    void visit(WasmArrayNewFixed expression);
+
+    void visit(WasmArrayGet expression);
+
+    void visit(WasmArraySet expression);
+
+    void visit(WasmArrayLength expression);
+
+    void visit(WasmArrayCopy expression);
+
+    void visit(WasmFunctionReference expression);
+
+    void visit(WasmInt31Reference expression);
+
+    void visit(WasmInt31Get expression);
 }

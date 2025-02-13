@@ -17,31 +17,27 @@ package org.teavm.backend.javascript.codegen;
 
 import com.carrotsearch.hppc.ObjectIntHashMap;
 import com.carrotsearch.hppc.ObjectIntMap;
-import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Map;
 import java.util.Set;
 import org.teavm.model.FieldReference;
 import org.teavm.model.MethodDescriptor;
 import org.teavm.model.MethodReference;
 
 public class DefaultAliasProvider implements AliasProvider {
-    private int topLevelAliasLimit;
-    private final Map<String, ScopedName> classAliases = new HashMap<>();
+    private final int maxTopLevelNames;
     private final Set<String> knownAliases = new HashSet<>(200, 0.5f);
     private final ObjectIntMap<String> knowAliasesCounter = new ObjectIntHashMap<>();
-    private final Set<String> knownScopedAliases = new HashSet<>(200, 0.5f);
-    private final ObjectIntMap<String> knowScopedAliasesCounter = new ObjectIntHashMap<>();
-    private final Set<String> knownVirtualAliases = new HashSet<>(200, 0.5f);
-    private final ObjectIntMap<String> knowVirtualAliasesCounter = new ObjectIntHashMap<>();
+    private final Set<String> knownInstanceAliases = new HashSet<>(200, 0.5f);
+    private final ObjectIntMap<String> knowInstanceAliasesCounter = new ObjectIntHashMap<>();
+    private boolean additionalScopeStarted;
 
-    public DefaultAliasProvider(int topLevelAliasLimit) {
-        this.topLevelAliasLimit = topLevelAliasLimit;
+    public DefaultAliasProvider(int maxTopLevelNames) {
+        this.maxTopLevelNames = maxTopLevelNames;
     }
 
     @Override
     public ScopedName getClassAlias(String cls) {
-        return classAliases.computeIfAbsent(cls, key -> makeUniqueTopLevel(suggestAliasForClass(key)));
+        return makeUnique(suggestAliasForClass(cls));
     }
 
     private static String suggestAliasForClass(String cls) {
@@ -91,7 +87,7 @@ public class DefaultAliasProvider implements AliasProvider {
                 alias = "$" + alias;
                 break;
         }
-        return makeUnique(knownVirtualAliases, knowVirtualAliasesCounter, alias);
+        return makeUniqueInstance(alias);
     }
 
     @Override
@@ -106,44 +102,55 @@ public class DefaultAliasProvider implements AliasProvider {
                 break;
         }
 
-        return makeUniqueTopLevel(getClassAlias(method.getClassName()).value + "_" + suggested);
+        return makeUnique(suggestAliasForClass(method.getClassName()) + "_" + suggested);
     }
 
     @Override
     public String getFieldAlias(FieldReference field) {
-        return makeUnique(knownVirtualAliases, knowVirtualAliasesCounter, "$" + field.getFieldName());
+        return makeUniqueInstance("$" + field.getFieldName());
     }
 
     @Override
     public ScopedName getStaticFieldAlias(FieldReference field) {
-        return makeUniqueTopLevel(getClassAlias(field.getClassName()).value + "_" + field.getFieldName());
+        return makeUnique(suggestAliasForClass(field.getClassName()) + "_" + field.getFieldName());
     }
 
     @Override
-    public String getFunctionAlias(String name) {
-        return name;
+    public ScopedName getFunctionAlias(String name) {
+        return makeUnique(name);
     }
 
     @Override
     public ScopedName getClassInitAlias(String className) {
-        return makeUniqueTopLevel(suggestAliasForClass(className) + "_$callClinit");
+        return makeUnique(suggestAliasForClass(className) + "_$callClinit");
     }
 
     @Override
-    public String getScopeAlias() {
-        return makeUnique(knownAliases, knowAliasesCounter, "$java");
+    public String getAdditionalScopeName() {
+        return makeUnique("$rt_java").name;
     }
 
     @Override
     public void reserveName(String name) {
     }
 
-    private ScopedName makeUniqueTopLevel(String suggested) {
-        if (knownAliases.size() < topLevelAliasLimit) {
-            return new ScopedName(false, makeUnique(knownAliases, knowAliasesCounter, suggested));
-        } else {
-            return new ScopedName(true, makeUnique(knownScopedAliases, knowScopedAliasesCounter, suggested));
+    private ScopedName makeUnique(String suggested) {
+        suggested = sanitize(suggested);
+        if (!additionalScopeStarted && knownAliases.size() >= maxTopLevelNames) {
+            additionalScopeStarted = true;
+            knownAliases.clear();
+            knowAliasesCounter.clear();
         }
+        var alias = suggested;
+        int index = knowAliasesCounter.get(alias);
+        if (index > 0) {
+            alias = suggested + index++;
+        }
+        while (!knownAliases.add(alias)) {
+            alias = suggested + index++;
+        }
+        knowAliasesCounter.put(alias, index);
+        return new ScopedName(alias, additionalScopeStarted);
     }
 
     private String sanitize(String s) {
@@ -179,17 +186,17 @@ public class DefaultAliasProvider implements AliasProvider {
         return isIdentifierStart(c) || c >= '0' && c <= '9';
     }
 
-    private String makeUnique(Set<String> knowAliases, ObjectIntMap<String> indexMap, String alias) {
+    private String makeUniqueInstance(String alias) {
         alias = sanitize(alias);
         String uniqueAlias = alias;
-        int index = indexMap.get(alias);
+        int index = knowInstanceAliasesCounter.get(alias);
         if (index > 0) {
             uniqueAlias = alias + index++;
         }
-        while (!knowAliases.add(uniqueAlias)) {
+        while (!knownInstanceAliases.add(uniqueAlias)) {
             uniqueAlias = alias + index++;
         }
-        indexMap.put(alias, index);
+        knowInstanceAliasesCounter.put(alias, index);
         return uniqueAlias;
     }
 }

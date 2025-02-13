@@ -30,15 +30,25 @@ public class VariableNameGenerator {
 
     public VariableNameGenerator(boolean minifying) {
         this.minifying = minifying;
+    }
+
+    public void setCurrentMethod(MethodNode currentMethod) {
+        this.currentMethod = currentMethod;
+    }
+
+    public void clear() {
+        cachedVariableNames.clear();
+        usedVariableNames.clear();
+        cachedVariableNameLastIndex = 0;
+        init();
+    }
+
+    private void init() {
         if (!minifying) {
             usedVariableNames.add("$tmp");
             usedVariableNames.add("$ptr");
             usedVariableNames.add("$thread");
         }
-    }
-
-    public void setCurrentMethod(MethodNode currentMethod) {
-        this.currentMethod = currentMethod;
     }
 
     public String variableName(int index) {
@@ -53,15 +63,19 @@ public class VariableNameGenerator {
             }
             return name;
         } else {
-            while (index >= cachedVariableNames.size()) {
-                String name;
-                do {
-                    name = RenderingUtil.indexToId(cachedVariableNameLastIndex++);
-                } while (RenderingUtil.KEYWORDS.contains(name));
-                cachedVariableNames.add(name);
-            }
-            return cachedVariableNames.get(index);
+            return minifiedVariableName(index);
         }
+    }
+
+    public String minifiedVariableName(int index) {
+        while (index >= cachedVariableNames.size()) {
+            String name;
+            do {
+                name = RenderingUtil.indexToId(cachedVariableNameLastIndex++);
+            } while (RenderingUtil.KEYWORDS.contains(name));
+            cachedVariableNames.add(name);
+        }
+        return cachedVariableNames.get(index);
     }
 
     private String generateVariableName(int index) {

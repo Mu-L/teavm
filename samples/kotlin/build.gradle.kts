@@ -1,3 +1,6 @@
+import org.jetbrains.kotlin.gradle.dsl.jvm.JvmTargetValidationMode
+import org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile
+
 /*
  *  Copyright 2023 Alexey Andreev.
  *
@@ -15,7 +18,7 @@
  */
 
 plugins {
-    kotlin("multiplatform") version "1.9.20"
+    alias(libs.plugins.kotlin.jvm)
     war
     id("org.teavm")
 }
@@ -24,11 +27,26 @@ dependencies {
     teavm(teavm.libs.jsoApis)
 }
 
-teavm.js {
-    addedToWebApp = true
-    mainClass = "org.teavm.samples.kotlin.HelloKt"
+teavm {
+    all {
+        mainClass = "org.teavm.samples.kotlin.HelloKt"
+    }
+    js {
+        addedToWebApp = true
+    }
+    wasmGC {
+        addedToWebApp = true
+    }
 }
 
-kotlin {
-    jvm()
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+kotlin.jvmToolchain(21)
+
+tasks.withType<KotlinJvmCompile>().configureEach {
+    jvmTargetValidationMode.set(JvmTargetValidationMode.WARNING)
 }

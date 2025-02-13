@@ -39,6 +39,9 @@ teavm {
         outputDir = layout.buildDirectory.dir("libs/wasi").get().asFile
         relativePathInOutputDir = ""
     }
+    wasmGC {
+        addedToWebApp = true
+    }
     all {
         mainClass = "org.teavm.samples.pi.PiCalculator"
     }
@@ -50,7 +53,7 @@ tasks.war {
 }
 
 tasks.assemble {
-    dependsOn(tasks.generateWasi,)
+    dependsOn(tasks.generateWasi)
 }
 
 val buildNativeLinux by tasks.register<Exec>("buildNativeLinux") {

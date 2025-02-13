@@ -211,14 +211,18 @@ class StatementGenerator implements InstructionVisitor {
     public void visit(CastInstruction insn) {
         CastExpr expr = new CastExpr();
         expr.setLocation(insn.getLocation());
+        expr.setVariableIndex(insn.getReceiver().getIndex());
         expr.setValue(Expr.var(insn.getValue().getIndex()));
         expr.setTarget(insn.getTargetType());
+        expr.setWeak(insn.isWeak());
         assign(expr, insn.getReceiver());
     }
 
     @Override
     public void visit(CastNumberInstruction insn) {
         PrimitiveCastExpr expr = new PrimitiveCastExpr();
+        expr.setLocation(insn.getLocation());
+        expr.setVariableIndex(insn.getReceiver().getIndex());
         expr.setSource(mapOperandType(insn.getSourceType()));
         expr.setTarget(mapOperandType(insn.getTargetType()));
         expr.setValue(Expr.var(insn.getValue().getIndex()));
@@ -397,6 +401,7 @@ class StatementGenerator implements InstructionVisitor {
         if (insn.getInstance() != null) {
             AssignmentStatement stmt = Statement.assign(Expr.var(insn.getReceiver().getIndex()),
                     Expr.qualify(Expr.var(insn.getInstance().getIndex()), insn.getField()));
+            stmt.getRightValue().setVariableIndex(insn.getReceiver().getIndex());
             stmt.setLocation(currentLocation);
             statements.add(stmt);
         } else {
@@ -495,6 +500,7 @@ class StatementGenerator implements InstructionVisitor {
         }
         AssignmentStatement stmt;
         if (insn.getReceiver() != null) {
+            invocationExpr.setVariableIndex(insn.getReceiver().getIndex());
             stmt = Statement.assign(Expr.var(insn.getReceiver().getIndex()), invocationExpr);
         } else {
             stmt = Statement.assign(null, invocationExpr);
@@ -518,6 +524,8 @@ class StatementGenerator implements InstructionVisitor {
 
     private void assign(Expr source, Variable target) {
         AssignmentStatement stmt = Statement.assign(Expr.var(target.getIndex()), source);
+        source.setLocation(currentLocation);
+        source.setVariableIndex(target.getIndex());
         stmt.setLocation(currentLocation);
         statements.add(stmt);
     }
@@ -647,7 +655,6 @@ class StatementGenerator implements InstructionVisitor {
         if (insn.getArray() != null) {
             expr.setArray(Expr.var(insn.getArray().getIndex()));
         }
-        expr.setLocation(insn.getLocation());
         assign(expr, insn.getReceiver());
     }
 }

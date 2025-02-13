@@ -91,6 +91,11 @@ public final class ExceptionHandling {
     }
 
     @Unmanaged
+    public static Throwable peekException() {
+        return thrownException;
+    }
+
+    @Unmanaged
     public static void throwException(Throwable exception) {
         thrownException = exception;
 

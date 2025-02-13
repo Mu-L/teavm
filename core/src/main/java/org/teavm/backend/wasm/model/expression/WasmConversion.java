@@ -16,16 +16,17 @@
 package org.teavm.backend.wasm.model.expression;
 
 import java.util.Objects;
-import org.teavm.backend.wasm.model.WasmType;
+import org.teavm.backend.wasm.model.WasmNumType;
 
 public class WasmConversion extends WasmExpression {
-    private WasmType sourceType;
-    private WasmType targetType;
+    private WasmNumType sourceType;
+    private WasmNumType targetType;
     private boolean signed;
     private WasmExpression operand;
     private boolean reinterpret;
+    private boolean nonTrapping;
 
-    public WasmConversion(WasmType sourceType, WasmType targetType, boolean signed, WasmExpression operand) {
+    public WasmConversion(WasmNumType sourceType, WasmNumType targetType, boolean signed, WasmExpression operand) {
         Objects.requireNonNull(sourceType);
         Objects.requireNonNull(targetType);
         Objects.requireNonNull(operand);
@@ -35,20 +36,20 @@ public class WasmConversion extends WasmExpression {
         this.operand = operand;
     }
 
-    public WasmType getSourceType() {
+    public WasmNumType getSourceType() {
         return sourceType;
     }
 
-    public void setSourceType(WasmType sourceType) {
+    public void setSourceType(WasmNumType sourceType) {
         Objects.requireNonNull(sourceType);
         this.sourceType = sourceType;
     }
 
-    public WasmType getTargetType() {
+    public WasmNumType getTargetType() {
         return targetType;
     }
 
-    public void setTargetType(WasmType targetType) {
+    public void setTargetType(WasmNumType targetType) {
         Objects.requireNonNull(targetType);
         this.targetType = targetType;
     }
@@ -76,6 +77,14 @@ public class WasmConversion extends WasmExpression {
     public void setOperand(WasmExpression operand) {
         Objects.requireNonNull(operand);
         this.operand = operand;
+    }
+
+    public boolean isNonTrapping() {
+        return nonTrapping;
+    }
+
+    public void setNonTrapping(boolean nonTrapping) {
+        this.nonTrapping = nonTrapping;
     }
 
     @Override

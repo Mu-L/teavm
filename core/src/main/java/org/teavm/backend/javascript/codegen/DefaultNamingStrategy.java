@@ -37,9 +37,9 @@ public class DefaultNamingStrategy implements NamingStrategy {
     private final Map<String, ScopedName> classAliases = new HashMap<>();
     private final Map<FieldReference, String> fieldAliases = new HashMap<>();
     private final Map<FieldReference, ScopedName> staticFieldAliases = new HashMap<>();
-    private final Map<String, String> functionAliases = new HashMap<>();
+    private final Map<String, ScopedName> functionAliases = new HashMap<>();
     private final Map<String, ScopedName> classInitAliases = new HashMap<>();
-    private String scopeName;
+    private String additionalScopeName;
 
     public DefaultNamingStrategy(AliasProvider aliasProvider, ClassReaderSource classSource) {
         this.aliasProvider = aliasProvider;
@@ -47,12 +47,12 @@ public class DefaultNamingStrategy implements NamingStrategy {
     }
 
     @Override
-    public ScopedName getNameFor(String cls) {
+    public ScopedName className(String cls) {
         return classAliases.computeIfAbsent(cls, key -> aliasProvider.getClassAlias(cls));
     }
 
     @Override
-    public String getNameFor(MethodDescriptor method) {
+    public String instanceMethodName(MethodDescriptor method) {
         String alias = aliases.get(method);
         if (alias == null) {
             alias = aliasProvider.getMethodAlias(method);
@@ -62,12 +62,12 @@ public class DefaultNamingStrategy implements NamingStrategy {
     }
 
     @Override
-    public ScopedName getFullNameFor(MethodReference method) {
+    public ScopedName methodName(MethodReference method) {
         return getFullNameFor(method, NO_CLASSIFIER);
     }
 
     @Override
-    public ScopedName getNameForInit(MethodReference method) {
+    public ScopedName initializerName(MethodReference method) {
         return getFullNameFor(method, INIT_CLASSIFIER);
     }
 
@@ -83,14 +83,14 @@ public class DefaultNamingStrategy implements NamingStrategy {
     }
 
     @Override
-    public String getNameFor(FieldReference field) {
+    public String instanceFieldName(FieldReference field) {
         String alias = fieldAliases.get(field);
         if (alias == null) {
             FieldReference realField = getRealField(field);
             if (realField.equals(field)) {
                 alias = aliasProvider.getFieldAlias(realField);
             } else {
-                alias = getNameFor(realField);
+                alias = instanceFieldName(realField);
             }
             fieldAliases.put(field, alias);
         }
@@ -98,14 +98,14 @@ public class DefaultNamingStrategy implements NamingStrategy {
     }
 
     @Override
-    public ScopedName getFullNameFor(FieldReference field) {
-        ScopedName alias = staticFieldAliases.get(field);
+    public ScopedName fieldName(FieldReference field) {
+        var alias = staticFieldAliases.get(field);
         if (alias == null) {
             FieldReference realField = getRealField(field);
             if (realField.equals(field)) {
                 alias = aliasProvider.getStaticFieldAlias(realField);
             } else {
-                alias = getFullNameFor(realField);
+                alias = fieldName(realField);
             }
             staticFieldAliases.put(field, alias);
         }
@@ -113,21 +113,21 @@ public class DefaultNamingStrategy implements NamingStrategy {
     }
 
     @Override
-    public String getNameForFunction(String name) {
-        return functionAliases.computeIfAbsent(name, key -> aliasProvider.getFunctionAlias(key));
+    public ScopedName functionName(String name) {
+        return functionAliases.computeIfAbsent(name, aliasProvider::getFunctionAlias);
     }
 
     @Override
-    public ScopedName getNameForClassInit(String className) {
-        return classInitAliases.computeIfAbsent(className, key -> aliasProvider.getClassInitAlias(key));
+    public ScopedName classInitializerName(String className) {
+        return classInitAliases.computeIfAbsent(className, aliasProvider::getClassInitAlias);
     }
 
     @Override
-    public String getScopeName() {
-        if (scopeName == null) {
-            scopeName = aliasProvider.getScopeAlias();
+    public String additionalScopeName() {
+        if (additionalScopeName == null) {
+            additionalScopeName = aliasProvider.getAdditionalScopeName();
         }
-        return scopeName;
+        return additionalScopeName;
     }
 
     @Override

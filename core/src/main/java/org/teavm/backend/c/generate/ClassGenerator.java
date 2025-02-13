@@ -73,6 +73,7 @@ import org.teavm.model.instructions.IsInstanceInstruction;
 import org.teavm.model.instructions.StringConstantInstruction;
 import org.teavm.model.lowlevel.CallSiteDescriptor;
 import org.teavm.model.lowlevel.Characteristics;
+import org.teavm.model.util.ReflectionUtil;
 import org.teavm.runtime.CallSite;
 import org.teavm.runtime.RuntimeArray;
 import org.teavm.runtime.RuntimeClass;
@@ -554,7 +555,10 @@ public class ClassGenerator {
         if (cls != null && cls.hasModifier(ElementModifier.ENUM)) {
             enumConstants = writeEnumConstants(cls, name);
         } else {
-            enumConstants = "NULL";
+            enumConstants = getBufferFieldInitializer(cls);
+            if (enumConstants == null) {
+                enumConstants = "NULL";
+            }
         }
 
         headerWriter.print("extern ").print(structName).print(" ").print(name).println(";");
@@ -598,6 +602,20 @@ public class ClassGenerator {
         }
 
         codeWriter.outdent().println(";");
+    }
+
+    private String getBufferFieldInitializer(ClassReader cls) {
+        if (cls == null) {
+            return null;
+        }
+        for (var field : cls.getFields()) {
+            if (ClassGeneratorUtil.isBufferObjectField(field)) {
+                String structName = context.getNames().forClass(cls.getName());
+                String fieldName = context.getNames().forMemberField(field.getReference());
+                return "(void*) offsetof(" + structName + ", " + fieldName + ")";
+            }
+        }
+        return null;
     }
 
     private int getInheritanceDepth(String className) {
@@ -795,14 +813,7 @@ public class ClassGenerator {
                 superinterfaces = sb.append(" }").toString();
             }
 
-            switch (className) {
-                case "java.lang.ref.WeakReference":
-                    flags |= RuntimeClass.VM_TYPE_WEAKREFERENCE << RuntimeClass.VM_TYPE_SHIFT;
-                    break;
-                case "java.lang.ref.ReferenceQueue":
-                    flags |= RuntimeClass.VM_TYPE_REFERENCEQUEUE << RuntimeClass.VM_TYPE_SHIFT;
-                    break;
-            }
+            flags = ClassGeneratorUtil.contributeToFlags(cls, flags);
 
             if (cls != null) {
                 simpleName = cls.getSimpleName();
@@ -1295,26 +1306,7 @@ public class ClassGenerator {
 
     public String nameOfType(ValueType type) {
         if (type instanceof ValueType.Primitive) {
-            switch (((ValueType.Primitive) type).getKind()) {
-                case BOOLEAN:
-                    return "boolean";
-                case BYTE:
-                    return "byte";
-                case SHORT:
-                    return "short";
-                case CHARACTER:
-                    return "char";
-                case INTEGER:
-                    return "int";
-                case LONG:
-                    return "long";
-                case FLOAT:
-                    return "float";
-                case DOUBLE:
-                    return "double";
-                default:
-                    throw new AssertionError();
-            }
+            return ReflectionUtil.typeName(((ValueType.Primitive) type).getKind());
         } else if (type instanceof ValueType.Array) {
             if (isArrayOfPrimitives(type)) {
                 return type.toString().replace('/', '.');

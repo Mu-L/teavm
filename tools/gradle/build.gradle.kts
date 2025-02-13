@@ -26,6 +26,7 @@ description = "TeaVM Gradle plugin"
 dependencies {
     implementation(project(":core"))
     implementation(project(":tools:core"))
+    implementation(project(":tools:deobfuscator-wasm-gc"))
 }
 
 gradlePlugin {
@@ -74,6 +75,7 @@ val createConfig by tasks.registering {
     val jsoImpl = findArtifactCoordinates(":jso:impl")
     val metaprogrammingImpl = findArtifactCoordinates(":metaprogramming:impl")
     val tools = findArtifactCoordinates(":tools:core")
+    val cli = findArtifactCoordinates(":tools:cli")
     val junit = findArtifactCoordinates(":tools:junit")
     doLast {
         val file = File(baseDir, "org/teavm/gradle/config/ArtifactCoordinates.java")
@@ -93,6 +95,7 @@ val createConfig by tasks.registering {
                 public static final String JUNIT = "$junit";
                 
                 public static final String TOOLS = "$tools";
+                public static final String CLI = "$cli";
             
                 private ArtifactCoordinates() {
                 }

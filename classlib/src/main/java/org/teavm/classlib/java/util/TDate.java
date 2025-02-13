@@ -25,7 +25,9 @@ import org.teavm.interop.NoSideEffects;
 import org.teavm.interop.Platforms;
 import org.teavm.interop.Unmanaged;
 import org.teavm.interop.UnsupportedOn;
+import org.teavm.jso.JSObject;
 import org.teavm.jso.core.JSDate;
+import org.teavm.jso.impl.JS;
 
 public class TDate implements TComparable<TDate> {
     private long value;
@@ -64,7 +66,9 @@ public class TDate implements TComparable<TDate> {
     public TDate(int year, int month, int date, int hrs, int min, int sec) {
         this(PlatformDetector.isLowLevel()
                 ? initDateLowLevel(year, month, date, hrs, min, sec)
-                : (long) JSDate.create(year, month, date, hrs, min, sec).getTime());
+                : PlatformDetector.isWebAssemblyGC()
+                ? (long) initDateWasmGC(year + 1900, month, date, hrs, min, sec)
+                : (long) new JSDate(year, month, date, hrs, min, sec).getTime());
         if (!PlatformDetector.isLowLevel()) {
             setYear(year);
         }
@@ -76,6 +80,10 @@ public class TDate implements TComparable<TDate> {
     @RuntimeInclude("date.h")
     @UnsupportedOn(Platforms.WEBASSEMBLY)
     private static native long initDateLowLevel(int year, int month, int date, int hrs, int min, int sec);
+
+    @Import(name = "create", module = "teavmDate")
+    @NoSideEffects
+    private static native double initDateWasmGC(int year, int month, int date, int hrs, int min, int sec);
 
     public TDate(String s) {
         this(parse(s));
@@ -90,6 +98,8 @@ public class TDate implements TComparable<TDate> {
     public static long UTC(int year, int month, int date, int hrs, int min, int sec) {
         if (PlatformDetector.isLowLevel()) {
             return initUtcDateLowLevel(year, month, date, hrs, min, sec);
+        } else if (PlatformDetector.isWebAssemblyGC()) {
+            return (long) initUtcDateWasmGC(year + 1900, month, date, hrs, min, sec);
         } else {
             return (long) JSDate.UTC(year + 1900, month, date, hrs, min, sec);
         }
@@ -101,6 +111,9 @@ public class TDate implements TComparable<TDate> {
     @RuntimeInclude("date.h")
     @UnsupportedOn(Platforms.WEBASSEMBLY)
     private static native long initUtcDateLowLevel(int year, int month, int date, int hrs, int min, int sec);
+
+    @Import(name = "createFromUTC", module = "teavmDate")
+    private static native double initUtcDateWasmGC(int year, int month, int date, int hrs, int min, int sec);
 
     @Deprecated
     public static long parse(String s) {
@@ -126,9 +139,14 @@ public class TDate implements TComparable<TDate> {
     public int getYear() {
         if (PlatformDetector.isLowLevel()) {
             return getYearLowLevel(value);
+        } else if (PlatformDetector.isWebAssemblyGC()) {
+            return getYearWasmGC(value) - 1900;
         }
-        return JSDate.create(value).getFullYear() - 1900;
+        return new JSDate(value).getFullYear() - 1900;
     }
+
+    @Import(name = "getYear", module = "teavmDate")
+    private static native int getYearWasmGC(double timestamp);
 
     @Import(name = "teavm_date_getYear")
     @NoSideEffects
@@ -142,11 +160,17 @@ public class TDate implements TComparable<TDate> {
         if (PlatformDetector.isLowLevel()) {
             value = setYearLowLevel(value, year);
             return;
+        } else if (PlatformDetector.isWebAssemblyGC()) {
+            value = (long) setYearWasmGC(value, year + 1900);
+            return;
         }
-        JSDate date = JSDate.create(value);
+        var date = new JSDate(value);
         date.setFullYear(year + 1900);
         value = (long) date.getTime();
     }
+
+    @Import(name = "setYear", module = "teavmDate")
+    private static native double setYearWasmGC(double timestamp, int year);
 
     @Import(name = "teavm_date_setYear")
     @NoSideEffects
@@ -159,8 +183,10 @@ public class TDate implements TComparable<TDate> {
     public int getMonth() {
         if (PlatformDetector.isLowLevel()) {
             return getMonthLowLevel(value);
+        } else if (PlatformDetector.isWebAssemblyGC()) {
+            return getMonthWasmGC(value);
         }
-        return JSDate.create(value).getMonth();
+        return new JSDate(value).getMonth();
     }
 
     @Import(name = "teavm_date_getMonth")
@@ -170,13 +196,19 @@ public class TDate implements TComparable<TDate> {
     @UnsupportedOn(Platforms.WEBASSEMBLY)
     private static native int getMonthLowLevel(long date);
 
+    @Import(name = "getMonth", module = "teavmDate")
+    private static native int getMonthWasmGC(double timestamp);
+
     @Deprecated
     public void setMonth(int month) {
         if (PlatformDetector.isLowLevel()) {
             value = setMonthLowLevel(value, month);
             return;
+        } else if (PlatformDetector.isWebAssemblyGC()) {
+            value = (long) setMonthWasmGC(value, month);
+            return;
         }
-        JSDate date = JSDate.create(value);
+        var date = new JSDate(value);
         date.setMonth(month);
         value = (long) date.getTime();
     }
@@ -188,12 +220,17 @@ public class TDate implements TComparable<TDate> {
     @UnsupportedOn(Platforms.WEBASSEMBLY)
     private static native long setMonthLowLevel(long date, int month);
 
+    @Import(name = "setMonth", module = "teavmDate")
+    private static native double setMonthWasmGC(double timestamp, int month);
+
     @Deprecated
     public int getDate() {
         if (PlatformDetector.isLowLevel()) {
             return getDateLowLevel(value);
+        } else if (PlatformDetector.isWebAssemblyGC()) {
+            return getDateWasmGC(value);
         }
-        return JSDate.create(value).getDate();
+        return new JSDate(value).getDate();
     }
 
     @Import(name = "teavm_date_getDate")
@@ -203,13 +240,19 @@ public class TDate implements TComparable<TDate> {
     @UnsupportedOn(Platforms.WEBASSEMBLY)
     private static native int getDateLowLevel(long date);
 
+    @Import(name = "getDate", module = "teavmDate")
+    private static native int getDateWasmGC(double timestamp);
+
     @Deprecated
     public void setDate(int date) {
         if (PlatformDetector.isLowLevel()) {
             value = setDateLowLevel(value, date);
             return;
+        } else if (PlatformDetector.isWebAssemblyGC()) {
+            value = (long) setDateWasmGC(value, date);
+            return;
         }
-        JSDate d = JSDate.create(value);
+        var d = new JSDate(value);
         d.setDate(date);
         this.value = (long) d.getTime();
     }
@@ -221,12 +264,15 @@ public class TDate implements TComparable<TDate> {
     @UnsupportedOn(Platforms.WEBASSEMBLY)
     private static native int setDateLowLevel(long target, int date);
 
+    @Import(name = "setDate", module = "teavmDate")
+    private static native double setDateWasmGC(double timestamp, int date);
+
     @Deprecated
     public int getDay() {
         if (PlatformDetector.isLowLevel()) {
             return getDayLowLevel(value);
         }
-        return JSDate.create(value).getDay();
+        return new JSDate(value).getDay();
     }
 
     @Import(name = "teavm_date_getDay")
@@ -239,7 +285,7 @@ public class TDate implements TComparable<TDate> {
         if (PlatformDetector.isLowLevel()) {
             return getHoursLowLevel(value);
         }
-        return JSDate.create(value).getHours();
+        return new JSDate(value).getHours();
     }
 
     @Import(name = "teavm_date_getHours")
@@ -369,11 +415,14 @@ public class TDate implements TComparable<TDate> {
     }
 
     @Override
+    @UnsupportedOn(Platforms.WEBASSEMBLY_GC)
     public String toString() {
         if (PlatformDetector.isC()) {
             return toStringC(value);
         } else if (PlatformDetector.isWebAssembly()) {
             return toStringWebAssembly(value);
+        } else if (PlatformDetector.isWebAssemblyGC()) {
+            return JS.unwrapString(toStringWebAssemblyGC(value));
         } else {
             return JSDate.create(value).stringValue();
         }
@@ -387,14 +436,17 @@ public class TDate implements TComparable<TDate> {
     @Import(module = "teavm", name = "dateToString")
     private static native String toStringWebAssembly(double date);
 
+    @Import(module = "teavmDate", name = "dateToString")
+    private static native JSObject toStringWebAssemblyGC(double date);
+
     @Deprecated
     public String toLocaleString() {
-        return JSDate.create(value).toLocaleFormat("%c");
+        return new JSDate(value).toLocaleFormat("%c");
     }
 
     @Deprecated
     public String toGMTString() {
-        return JSDate.create(value).toUTCString();
+        return new JSDate(value).toUTCString();
     }
 
     @Deprecated

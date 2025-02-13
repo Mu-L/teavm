@@ -21,13 +21,16 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import org.teavm.backend.javascript.spi.GeneratedBy;
 import org.teavm.backend.javascript.spi.InjectedBy;
+import org.teavm.backend.wasm.generate.gc.classes.WasmGCClassFlags;
 import org.teavm.classlib.PlatformDetector;
+import org.teavm.classlib.impl.reflection.ClassSupport;
 import org.teavm.classlib.impl.reflection.Flags;
 import org.teavm.classlib.impl.reflection.JSClass;
 import org.teavm.classlib.impl.reflection.JSField;
@@ -52,12 +55,13 @@ import org.teavm.platform.PlatformSequence;
 import org.teavm.runtime.RuntimeClass;
 import org.teavm.runtime.RuntimeObject;
 
-public class TClass<T> extends TObject implements TAnnotatedElement, TType {
+public final class TClass<T> extends TObject implements TAnnotatedElement, TType {
     String name;
     String simpleName;
     String canonicalName;
     private PlatformClass platformClass;
     private TAnnotation[] annotationsCache;
+    private TAnnotation[] declaredAnnotationsCache;
     private Map<TClass<?>, TAnnotation> annotationsByType;
     private TField[] declaredFields;
     private TField[] fields;
@@ -96,6 +100,9 @@ public class TClass<T> extends TObject implements TAnnotatedElement, TType {
 
     @DelegateTo("isInstanceLowLevel")
     public boolean isInstance(TObject obj) {
+        if (PlatformDetector.isWebAssemblyGC()) {
+            return obj != null && isAssignableFrom((TClass<?>) (Object) obj.getClass());
+        }
         return Platform.isInstance(Platform.getPlatformObject(obj), platformClass);
     }
 
@@ -115,7 +122,20 @@ public class TClass<T> extends TObject implements TAnnotatedElement, TType {
     }
 
     public String getName() {
-        if (PlatformDetector.isLowLevel()) {
+        if (PlatformDetector.isWebAssemblyGC()) {
+            var result = getNameImpl();
+            if (result == null) {
+                if (isArray()) {
+                    var componentType = getComponentType();
+                    String componentName = componentType.getName();
+                    if (componentName != null) {
+                        result = componentType.isArray() ? "[" + componentName : "[L" + componentName + ";";
+                        setNameImpl(result);
+                    }
+                }
+            }
+            return result;
+        } else if (PlatformDetector.isLowLevel()) {
             String result = getNameCache(this);
             if (result == null) {
                 result = Platform.getName(platformClass);
@@ -139,18 +159,26 @@ public class TClass<T> extends TObject implements TAnnotatedElement, TType {
         }
     }
 
+    private native String getNameImpl();
+
+    private native void setNameImpl(String name);
+
     public String getSimpleName() {
         String simpleName = getSimpleNameCache(this);
         if (simpleName == null) {
             if (isArray()) {
                 simpleName = getComponentType().getSimpleName() + "[]";
             } else if (getEnclosingClass() != null) {
-                simpleName = Platform.getSimpleName(platformClass);
+                simpleName = PlatformDetector.isWebAssemblyGC()
+                    ? getSimpleNameCache(this)
+                    : Platform.getSimpleName(platformClass);
                 if (simpleName == null) {
                     simpleName = "";
                 }
             } else {
-                String name = Platform.getName(platformClass);
+                var name = PlatformDetector.isWebAssemblyGC()
+                        ? getName()
+                        : Platform.getName(platformClass);
                 int lastDollar = name.lastIndexOf('$');
                 if (lastDollar != -1) {
                     name = name.substring(lastDollar + 1);
@@ -239,7 +267,9 @@ public class TClass<T> extends TObject implements TAnnotatedElement, TType {
     }
 
     private boolean isSynthetic() {
-        if (PlatformDetector.isJavaScript()) {
+        if (PlatformDetector.isWebAssemblyGC()) {
+            return (getWasmGCFlags() & WasmGCClassFlags.SYNTHETIC) != 0;
+        } else if (PlatformDetector.isJavaScript()) {
             return (platformClass.getMetadata().getAccessLevel() & Flags.SYNTHETIC) != 0;
         } else {
             return (RuntimeClass.getClass(Address.ofObject(this).toStructure()).flags & RuntimeClass.SYNTHETIC) != 0;
@@ -268,29 +298,46 @@ public class TClass<T> extends TObject implements TAnnotatedElement, TType {
     }
 
     public boolean isPrimitive() {
+        if (PlatformDetector.isWebAssemblyGC()) {
+            return (getWasmGCFlags() & WasmGCClassFlags.PRIMITIVE) != 0;
+        }
         return Platform.isPrimitive(platformClass);
     }
 
     public boolean isArray() {
+        if (PlatformDetector.isWebAssemblyGC()) {
+            return getComponentType() != null;
+        }
         return Platform.getArrayItem(platformClass) != null;
     }
 
     public boolean isEnum() {
+        if (PlatformDetector.isWebAssemblyGC()) {
+            return (getWasmGCFlags() & WasmGCClassFlags.ENUM) != 0;
+        }
         return Platform.isEnum(platformClass);
     }
 
     public boolean isInterface() {
+        if (PlatformDetector.isWebAssemblyGC()) {
+            return (getWasmGCFlags() & WasmGCClassFlags.INTERFACE) != 0;
+        }
         return (platformClass.getMetadata().getFlags() & Flags.INTERFACE) != 0;
+
     }
 
     public boolean isLocalClass() {
-        return (platformClass.getMetadata().getFlags() & Flags.SYNTHETIC) != 0
-                && getEnclosingClass() != null;
+        if (PlatformDetector.isWebAssemblyGC()) {
+            return (getWasmGCFlags() & WasmGCClassFlags.SYNTHETIC) != 0 && getEnclosingClass() != null;
+        }
+        return (platformClass.getMetadata().getFlags() & Flags.SYNTHETIC) != 0 && getEnclosingClass() != null;
     }
 
     public boolean isMemberClass() {
         return getDeclaringClass() != null;
     }
+
+    private native int getWasmGCFlags();
 
     @PluggableDependency(ClassGenerator.class)
     public TClass<?> getComponentType() {
@@ -666,8 +713,12 @@ public class TClass<T> extends TObject implements TAnnotatedElement, TType {
         if (!isEnum()) {
             return null;
         }
-        Platform.initClass(platformClass);
-        return (T[]) Platform.getEnumConstants(platformClass).clone();
+        if (PlatformDetector.isWebAssemblyGC()) {
+            return (T[]) ClassSupport.getEnumConstants((Class<?>) (Object) this);
+        } else {
+            Platform.initClass(platformClass);
+            return (T[]) Platform.getEnumConstants(platformClass).clone();
+        }
     }
 
     @SuppressWarnings("unchecked")
@@ -744,14 +795,33 @@ public class TClass<T> extends TObject implements TAnnotatedElement, TType {
     @Override
     public TAnnotation[] getAnnotations() {
         if (annotationsCache == null) {
-            annotationsCache = (TAnnotation[]) Platform.getAnnotations(getPlatformClass());
+            TClass<?> cls = this;
+            var initial = true;
+            var map = new LinkedHashMap<Class<?>, TAnnotation>();
+            while (cls != null) {
+                for (var annot : cls.getDeclaredAnnotations()) {
+                    var platformClass = ((TClass<?>) (Object) annot.annotationType()).platformClass;
+                    if (initial || (platformClass.getMetadata().getFlags() & Flags.INHERITED_ANNOTATION) != 0) {
+                        map.putIfAbsent(annot.annotationType(), annot);
+                    }
+                }
+                cls = cls.getSuperclass();
+                initial = false;
+            }
+            annotationsCache = map.values().toArray(new TAnnotation[0]);
         }
         return annotationsCache.clone();
     }
 
     @Override
     public TAnnotation[] getDeclaredAnnotations() {
-        return getAnnotations();
+        if (declaredAnnotationsCache == null) {
+            declaredAnnotationsCache = (TAnnotation[]) Platform.getAnnotations(getPlatformClass());
+            if (declaredAnnotationsCache == null) {
+                declaredAnnotationsCache = new TAnnotation[0];
+            }
+        }
+        return declaredAnnotationsCache.clone();
     }
 
     private void ensureAnnotationsByType() {

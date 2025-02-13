@@ -19,36 +19,41 @@ import static org.teavm.junit.PropertyNames.OPTIMIZED;
 import static org.teavm.junit.PropertyNames.WASM_ENABLED;
 import static org.teavm.junit.PropertyNames.WASM_RUNNER;
 import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.OutputStreamWriter;
+import java.io.PrintWriter;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
 import org.teavm.backend.wasm.WasmRuntimeType;
 import org.teavm.backend.wasm.WasmTarget;
+import org.teavm.backend.wasm.disasm.Disassembler;
+import org.teavm.backend.wasm.disasm.DisassemblyHTMLWriter;
+import org.teavm.browserrunner.BrowserRunner;
 import org.teavm.model.ClassHolderSource;
 import org.teavm.model.MethodReference;
 import org.teavm.model.ReferenceCache;
 
 class WebAssemblyPlatformSupport extends BaseWebAssemblyPlatformSupport {
-    WebAssemblyPlatformSupport(ClassHolderSource classSource, ReferenceCache referenceCache) {
+    private boolean disassembly;
+
+    WebAssemblyPlatformSupport(ClassHolderSource classSource, ReferenceCache referenceCache, boolean disassembly) {
         super(classSource, referenceCache);
+        this.disassembly = disassembly;
     }
 
     @Override
     TestRunStrategy createRunStrategy(File outputDir) {
         var runStrategyName = System.getProperty(WASM_RUNNER);
-        if (runStrategyName != null) {
-            switch (runStrategyName) {
-                case "browser":
-                    return new BrowserRunStrategy(outputDir, "WASM", BrowserRunStrategy::customBrowser);
-                case "chrome":
-                case "browser-chrome":
-                    return new BrowserRunStrategy(outputDir, "WASM", BrowserRunStrategy::chromeBrowser);
-                case "browser-firefox":
-                    return new BrowserRunStrategy(outputDir, "WASM", BrowserRunStrategy::firefoxBrowser);
-                default:
-                    throw new RuntimeException("Unknown run strategy: " + runStrategyName);
-            }
-        }
-        return null;
+        return runStrategyName != null
+                ? new BrowserRunStrategy(outputDir, "WASM", BrowserRunner.pickBrowser(runStrategyName))
+                : null;
+    }
+
+    @Override
+    protected boolean exceptionsUsed() {
+        return true;
     }
 
     @Override
@@ -62,13 +67,16 @@ class WebAssemblyPlatformSupport extends BaseWebAssemblyPlatformSupport {
     }
 
     @Override
+    boolean isEnabled() {
+        return Boolean.getBoolean(WASM_ENABLED);
+    }
+
+    @Override
     List<TeaVMTestConfiguration<WasmTarget>> getConfigurations() {
         List<TeaVMTestConfiguration<WasmTarget>> configurations = new ArrayList<>();
-        if (Boolean.getBoolean(WASM_ENABLED)) {
-            configurations.add(TeaVMTestConfiguration.WASM_DEFAULT);
-            if (Boolean.getBoolean(OPTIMIZED)) {
-                configurations.add(TeaVMTestConfiguration.WASM_OPTIMIZED);
-            }
+        configurations.add(TeaVMTestConfiguration.WASM_DEFAULT);
+        if (Boolean.getBoolean(OPTIMIZED)) {
+            configurations.add(TeaVMTestConfiguration.WASM_OPTIMIZED);
         }
         return configurations;
     }
@@ -82,11 +90,29 @@ class WebAssemblyPlatformSupport extends BaseWebAssemblyPlatformSupport {
     void additionalOutput(File outputPath, File outputPathForMethod, TeaVMTestConfiguration<?> configuration,
             MethodReference reference) {
         htmlOutput(outputPath, outputPathForMethod, configuration, reference, "teavm-run-test-wasm.html");
+        if (disassembly) {
+            writeDisassembly(outputPath, "classTest", configuration);
+        }
     }
 
     @Override
     void additionalSingleTestOutput(File outputPathForMethod, TeaVMTestConfiguration<?> configuration,
             MethodReference reference) {
         htmlSingleTestOutput(outputPathForMethod, configuration, "teavm-run-test-wasm.html");
+        if (disassembly) {
+            writeDisassembly(outputPathForMethod, "test", configuration);
+        }
+    }
+
+    private void writeDisassembly(File outputPath, String name, TeaVMTestConfiguration<?> configuration) {
+        var binPath = getOutputFile(outputPath, name, configuration.getSuffix(), getExtension());
+        var htmlPath = getOutputFile(outputPath, name, configuration.getSuffix(), ".wast.html");
+        try (var writer = new OutputStreamWriter(new FileOutputStream(htmlPath))) {
+            var disasmWriter = new DisassemblyHTMLWriter(new PrintWriter(writer));
+            disasmWriter.setWithAddress(true);
+            new Disassembler(disasmWriter).disassemble(Files.readAllBytes(binPath.toPath()));
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 }

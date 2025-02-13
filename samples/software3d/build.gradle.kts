@@ -18,7 +18,7 @@ import org.teavm.gradle.tasks.TeaVMTask
  */
 
 plugins {
-    kotlin("multiplatform") version "1.9.20"
+    alias(libs.plugins.kotlin.multiplatform)
     war
     id("org.teavm")
 }
@@ -57,6 +57,7 @@ kotlin {
 
 tasks.withType<TeaVMTask> {
     classpath.from(kotlin.jvm().compilations["main"].output.classesDirs)
+    classpath.from(kotlin.jvm().compilations["main"].runtimeDependencyFiles)
 }
 
 tasks.war {

@@ -19,5 +19,6 @@ public enum TestPlatform {
     JAVASCRIPT,
     WEBASSEMBLY,
     WASI,
+    WEBASSEMBLY_GC,
     C
 }

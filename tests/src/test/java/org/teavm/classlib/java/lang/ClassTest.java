@@ -20,11 +20,12 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
-import java.lang.annotation.Annotation;
+import java.lang.annotation.Inherited;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.Set;
 import java.util.function.Supplier;
+import java.util.stream.Stream;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.teavm.junit.SkipPlatform;
@@ -114,7 +115,7 @@ public class ClassTest {
     }
 
     @Test
-    @SkipPlatform({TestPlatform.C, TestPlatform.WEBASSEMBLY, TestPlatform.WASI})
+    @SkipPlatform({TestPlatform.C, TestPlatform.WEBASSEMBLY, TestPlatform.WASI, TestPlatform.WEBASSEMBLY_GC})
     public void instanceCreatedThroughReflection() throws Exception {
         Runnable instance = (Runnable) Class.forName(TestObject.class.getName()).newInstance();
         instance.run();
@@ -123,7 +124,7 @@ public class ClassTest {
     }
 
     @Test
-    @SkipPlatform({TestPlatform.C, TestPlatform.WEBASSEMBLY, TestPlatform.WASI})
+    @SkipPlatform({TestPlatform.C, TestPlatform.WEBASSEMBLY, TestPlatform.WASI, TestPlatform.WEBASSEMBLY_GC})
     public void instanceCreatedThoughReflectionWithConstantName() throws Exception {
         var cls = Class.forName("org.teavm.classlib.java.lang.ClassTest$ClassReferredByConstantName");
         assertArrayEquals(new Class<?>[] { Supplier.class }, cls.getInterfaces());
@@ -138,7 +139,7 @@ public class ClassTest {
     }
 
     @Test
-    @SkipPlatform({TestPlatform.C, TestPlatform.WEBASSEMBLY, TestPlatform.WASI})
+    @SkipPlatform({TestPlatform.C, TestPlatform.WEBASSEMBLY, TestPlatform.WASI, TestPlatform.WEBASSEMBLY_GC})
     public void instanceCreatedThroughReflectionAsync() throws Exception {
         Runnable instance = TestObjectAsync.class.newInstance();
         instance.run();
@@ -180,15 +181,14 @@ public class ClassTest {
     }
 
     @Test
-    @SkipPlatform({TestPlatform.C, TestPlatform.WEBASSEMBLY, TestPlatform.WASI})
+    @SkipPlatform({TestPlatform.C, TestPlatform.WEBASSEMBLY, TestPlatform.WASI, TestPlatform.WEBASSEMBLY_GC})
     public void annotationsExposed() {
-        Annotation[] annotations = A.class.getAnnotations();
-        assertEquals(1, annotations.length);
-        assertTrue(TestAnnot.class.isAssignableFrom(annotations[0].getClass()));
+        var annotations = A.class.getAnnotations();
+        assertTrue(Stream.of(annotations).anyMatch(a -> a instanceof TestAnnot));
     }
 
     @Test
-    @SkipPlatform({TestPlatform.C, TestPlatform.WEBASSEMBLY, TestPlatform.WASI})
+    @SkipPlatform({TestPlatform.C, TestPlatform.WEBASSEMBLY, TestPlatform.WASI, TestPlatform.WEBASSEMBLY_GC})
     public void annotationFieldsExposed() {
         AnnotWithDefaultField annot = B.class.getAnnotation(AnnotWithDefaultField.class);
         assertEquals(2, annot.x());
@@ -197,7 +197,7 @@ public class ClassTest {
     }
 
     @Test
-    @SkipPlatform({TestPlatform.C, TestPlatform.WEBASSEMBLY, TestPlatform.WASI})
+    @SkipPlatform({TestPlatform.C, TestPlatform.WEBASSEMBLY, TestPlatform.WASI, TestPlatform.WEBASSEMBLY_GC})
     public void annotationFieldTypesSupported() {
         AnnotWithVariousFields annot = D.class.getAnnotation(AnnotWithVariousFields.class);
         assertEquals(true, annot.a());
@@ -218,11 +218,28 @@ public class ClassTest {
     }
 
     @Test
-    @SkipPlatform({TestPlatform.C, TestPlatform.WEBASSEMBLY, TestPlatform.WASI})
+    @SkipPlatform({TestPlatform.C, TestPlatform.WEBASSEMBLY, TestPlatform.WASI, TestPlatform.WEBASSEMBLY_GC})
     public void getInterfaces() {
         assertEquals(0, SuperclassWithoutInterfaces.class.getInterfaces().length);
         assertEquals(Set.of(TestInterface1.class, TestInterface2.class),
                 Set.of(ClassWithInterfaces.class.getInterfaces()));
+    }
+
+    @Test
+    @SkipPlatform({TestPlatform.C, TestPlatform.WEBASSEMBLY, TestPlatform.WASI, TestPlatform.WEBASSEMBLY_GC})
+    public void inheritedAnnotation() {
+        assertTrue(A.class.isAnnotationPresent(InheritedAnnot.class));
+        assertTrue(A.class.isAnnotationPresent(TestAnnot.class));
+        assertTrue(ASub.class.isAnnotationPresent(InheritedAnnot.class));
+        assertFalse(ASub.class.isAnnotationPresent(TestAnnot.class));
+        assertTrue(TestInterface1.class.isAnnotationPresent(InheritedAnnot.class));
+        assertFalse(ClassWithInterfaces.class.isAnnotationPresent(InheritedAnnot.class));
+
+        var annotationSet = Set.of(ASub.class.getAnnotations());
+        assertTrue(annotationSet.stream().anyMatch(a -> a instanceof InheritedAnnot));
+        assertFalse(annotationSet.stream().anyMatch(a -> a instanceof TestAnnot));
+
+        assertEquals(0, ASub.class.getDeclaredAnnotations().length);
     }
 
     private static class SuperclassWithoutInterfaces {
@@ -232,6 +249,7 @@ public class ClassTest {
             implements TestInterface1, TestInterface2 {
     }
 
+    @InheritedAnnot
     private interface TestInterface1 {
     }
 
@@ -239,7 +257,11 @@ public class ClassTest {
     }
 
     @TestAnnot
+    @InheritedAnnot
     private static class A {
+    }
+
+    private static class ASub extends A {
     }
 
     @AnnotWithDefaultField
@@ -263,6 +285,11 @@ public class ClassTest {
     @Retention(RetentionPolicy.RUNTIME)
     @interface AnnotWithDefaultField {
         int x() default 2;
+    }
+
+    @Retention(RetentionPolicy.RUNTIME)
+    @Inherited
+    @interface InheritedAnnot {
     }
 
     @Retention(RetentionPolicy.RUNTIME)
