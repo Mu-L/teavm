@@ -20,14 +20,14 @@ import org.teavm.backend.wasm.model.WasmFunction;
 import org.teavm.backend.wasm.model.WasmFunctionType;
 import org.teavm.backend.wasm.model.WasmLocal;
 import org.teavm.backend.wasm.model.WasmType;
-import org.teavm.backend.wasm.model.expression.WasmCall;
-import org.teavm.backend.wasm.model.expression.WasmCast;
-import org.teavm.backend.wasm.model.expression.WasmExpression;
-import org.teavm.backend.wasm.model.expression.WasmExternConversion;
 import org.teavm.backend.wasm.model.expression.WasmExternConversionType;
-import org.teavm.backend.wasm.model.expression.WasmGetLocal;
-import org.teavm.backend.wasm.model.expression.WasmPush;
+import org.teavm.backend.wasm.model.instruction.WasmCallInstruction;
+import org.teavm.backend.wasm.model.instruction.WasmCastInstruction;
+import org.teavm.backend.wasm.model.instruction.WasmExternConversionInstruction;
+import org.teavm.backend.wasm.model.instruction.WasmGetLocalInstruction;
+import org.teavm.backend.wasm.model.instruction.WasmInstructionList;
 import org.teavm.model.MethodReference;
+import org.teavm.model.TextLocation;
 import org.teavm.runtime.Fiber;
 
 class CoroutineFunctions {
@@ -171,72 +171,91 @@ class CoroutineFunctions {
         return currentFiberCache;
     }
 
-    WasmExpression restoreValue(WasmType type, WasmLocal fiberLocal) {
+    void restoreValue(WasmType type, WasmInstructionList target, TextLocation location) {
         if (type instanceof WasmType.Number) {
             switch (((WasmType.Number) type).number) {
                 case INT32:
-                    return new WasmCall(popInt(), new WasmGetLocal(fiberLocal));
+                    target.add(new WasmCallInstruction(popInt()), location);
+                    break;
                 case INT64:
-                    return new WasmCall(popLong(), new WasmGetLocal(fiberLocal));
+                    target.add(new WasmCallInstruction(popLong()), location);
+                    break;
                 case FLOAT32:
-                    return new WasmPush(new WasmCall(popFloat(), new WasmGetLocal(fiberLocal)));
+                    target.add(new WasmCallInstruction(popFloat()), location);
+                    break;
                 case FLOAT64:
-                    return new WasmPush(new WasmCall(popDouble(), new WasmGetLocal(fiberLocal)));
+                    target.add(new WasmCallInstruction(popDouble()), location);
+                    break;
             }
-            throw new IllegalArgumentException();
         } else if (type instanceof WasmType.Reference) {
             var refType = (WasmType.Reference) type;
-            WasmExpression obj = new WasmCall(popPlatformObject(), new WasmGetLocal(fiberLocal));
             if (type instanceof WasmType.SpecialReference) {
                 switch (((WasmType.SpecialReference) type).kind) {
                     case EXTERN:
-                        obj = new WasmExternConversion(WasmExternConversionType.ANY_TO_EXTERN, obj);
-                        break;
+                        target.add(new WasmCallInstruction(popPlatformObject()), location);
+                        target.add(new WasmExternConversionInstruction(WasmExternConversionType.ANY_TO_EXTERN),
+                                location);
+                        return;
                     case FUNC:
-                        obj = new WasmCall(popPlatformFunction(), new WasmGetLocal(fiberLocal));
+                        target.add(new WasmCallInstruction(popPlatformFunction()), location);
+                        break;
+                    default:
+                        target.add(new WasmCallInstruction(popPlatformObject()), location);
                         break;
                 }
             } else if (type instanceof WasmType.CompositeReference) {
                 var composite = ((WasmType.CompositeReference) type).composite;
                 if (composite instanceof WasmFunctionType) {
-                    obj = new WasmCall(popPlatformFunction(), new WasmGetLocal(fiberLocal));
+                    target.add(new WasmCallInstruction(popPlatformFunction()), location);
+                } else {
+                    target.add(new WasmCallInstruction(popPlatformObject()), location);
                 }
             }
-            return new WasmCast(obj, refType);
+            target.add(new WasmCastInstruction(refType), location);
         } else {
             throw new IllegalArgumentException();
         }
     }
 
-    WasmExpression saveValue(WasmType type, WasmLocal fiberLocal, WasmExpression value) {
+    void saveValue(WasmType type, WasmInstructionList list, WasmLocal fiberLocal, TextLocation location) {
         if (type instanceof WasmType.Number) {
+            list.add(new WasmGetLocalInstruction(fiberLocal), location);
             switch (((WasmType.Number) type).number) {
                 case INT32:
-                    return new WasmCall(pushInt(), value, new WasmGetLocal(fiberLocal));
+                    list.add(new WasmCallInstruction(pushInt()), location);
+                    break;
                 case INT64:
-                    return new WasmCall(pushLong(), value, new WasmGetLocal(fiberLocal));
+                    list.add(new WasmCallInstruction(pushLong()), location);
+                    break;
                 case FLOAT32:
-                    return new WasmCall(pushFloat(), value, new WasmGetLocal(fiberLocal));
+                    list.add(new WasmCallInstruction(pushFloat()), location);
+                    break;
                 case FLOAT64:
-                    return new WasmCall(pushDouble(), value, new WasmGetLocal(fiberLocal));
+                    list.add(new WasmCallInstruction(pushDouble()), location);
+                    break;
             }
-            throw new IllegalArgumentException();
         } else {
             if (type instanceof WasmType.SpecialReference) {
                 switch (((WasmType.SpecialReference) type).kind) {
                     case EXTERN:
-                        value = new WasmExternConversion(WasmExternConversionType.EXTERN_TO_ANY, value);
+                        list.add(new WasmExternConversionInstruction(WasmExternConversionType.EXTERN_TO_ANY),
+                                location);
                         break;
                     case FUNC:
-                        return new WasmCall(pushPlatformFunction(), value, new WasmGetLocal(fiberLocal));
+                        list.add(new WasmGetLocalInstruction(fiberLocal), location);
+                        list.add(new WasmCallInstruction(pushPlatformFunction()), location);
+                        return;
                 }
             } else if (type instanceof WasmType.CompositeReference) {
                 var composite = ((WasmType.CompositeReference) type).composite;
                 if (composite instanceof WasmFunctionType) {
-                    return new WasmCall(pushPlatformFunction(), value, new WasmGetLocal(fiberLocal));
+                    list.add(new WasmGetLocalInstruction(fiberLocal), location);
+                    list.add(new WasmCallInstruction(pushPlatformFunction()), location);
+                    return;
                 }
             }
-            return new WasmCall(pushPlatformObject(), value, new WasmGetLocal(fiberLocal));
+            list.add(new WasmGetLocalInstruction(fiberLocal), location);
+            list.add(new WasmCallInstruction(pushPlatformObject()), location);
         }
     }
 }

@@ -20,14 +20,12 @@ import java.io.StringWriter;
 import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Queue;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.function.Supplier;
 import org.teavm.ast.RegularMethodNode;
 import org.teavm.ast.decompilation.Decompiler;
 import org.teavm.backend.wasm.BaseWasmFunctionRepository;
@@ -41,23 +39,20 @@ import org.teavm.backend.wasm.generate.classes.WasmGCTypeMapper;
 import org.teavm.backend.wasm.generate.strings.WasmGCStringProvider;
 import org.teavm.backend.wasm.generators.WasmGCCustomGenerator;
 import org.teavm.backend.wasm.generators.WasmGCCustomGeneratorContext;
+import org.teavm.backend.wasm.model.WasmExpressionToInstructionConverter;
 import org.teavm.backend.wasm.model.WasmFunction;
 import org.teavm.backend.wasm.model.WasmLocal;
 import org.teavm.backend.wasm.model.WasmModule;
 import org.teavm.backend.wasm.model.WasmTag;
 import org.teavm.backend.wasm.model.WasmType;
-import org.teavm.backend.wasm.model.expression.WasmBlock;
-import org.teavm.backend.wasm.model.expression.WasmCall;
-import org.teavm.backend.wasm.model.expression.WasmCatch;
-import org.teavm.backend.wasm.model.expression.WasmExpression;
 import org.teavm.backend.wasm.model.expression.WasmFunctionReference;
 import org.teavm.backend.wasm.model.expression.WasmGetGlobal;
-import org.teavm.backend.wasm.model.expression.WasmGetLocal;
 import org.teavm.backend.wasm.model.expression.WasmSetGlobal;
 import org.teavm.backend.wasm.model.expression.WasmStructSet;
-import org.teavm.backend.wasm.model.expression.WasmThrow;
-import org.teavm.backend.wasm.model.expression.WasmTry;
-import org.teavm.backend.wasm.model.expression.WasmUnreachable;
+import org.teavm.backend.wasm.model.instruction.WasmCatchClause;
+import org.teavm.backend.wasm.model.instruction.WasmInstructionBuilder;
+import org.teavm.backend.wasm.model.instruction.WasmInstructionList;
+import org.teavm.backend.wasm.model.instruction.WasmUnreachableInstruction;
 import org.teavm.backend.wasm.transformation.CoroutineTransformation;
 import org.teavm.backend.wasm.types.PreciseTypeInference;
 import org.teavm.backend.wasm.types.PreciseValueType;
@@ -321,7 +316,7 @@ public class WasmGCMethodGenerator implements BaseWasmFunctionRepository {
             diagnostics.error(new CallLocation(method.getReference()),
                     "Failed generating method body due to internal exception: " + buffer);
             function.getBody().clear();
-            function.getBody().add(new WasmUnreachable());
+            function.getBody().add(new WasmUnreachableInstruction());
         }
     }
 
@@ -417,9 +412,9 @@ public class WasmGCMethodGenerator implements BaseWasmFunctionRepository {
         }
 
         addInitializerErase(method, function);
-        var visitor = new WasmGCGenerationVisitor(getGenerationContext(), method.getReference(),
+        var visitor = new WasmGCInstructionGenerationVisitor(getGenerationContext(), method.getReference(),
                 function, firstVar, isSuspend, typeInference, asyncSplitMethods);
-        visitor.setCompactMode(methodCompact);
+        //visitor.setCompactMode(methodCompact);
         var target = function.getBody();
         target = wrapSynchronizedMethod(method, visitor, function, target);
         visitor.generate(ast.getBody(), target);
@@ -431,47 +426,49 @@ public class WasmGCMethodGenerator implements BaseWasmFunctionRepository {
         }
     }
 
-    private List<WasmExpression> wrapSynchronizedMethod(MethodHolder method, WasmGCGenerationVisitor visitor,
-            WasmFunction function, List<WasmExpression> target) {
+    private WasmInstructionList wrapSynchronizedMethod(MethodHolder method, WasmGCInstructionGenerationVisitor visitor,
+            WasmFunction function, WasmInstructionList target) {
         if (!method.hasModifier(ElementModifier.SYNCHRONIZED)) {
             return target;
         }
 
-        Supplier<WasmExpression> obj = method.hasModifier(ElementModifier.STATIC)
-                ? () -> generateClassLiteral(method.getOwnerName())
-                : () -> new WasmGetLocal(function.getLocalVariables().get(0));
-        visitor.monitorEnter(obj.get(), null, target);
+        var builder = target.builder();
+        generateMonitor(method, function, builder);
+        visitor.monitorEnter(builder);
 
-        var returnBlock = new WasmBlock(false);
-        returnBlock.setType(context.functionTypes().blockType(function.getType().getReturnTypes()));
-        target.add(returnBlock);
-
-        var tryCatch = new WasmTry();
-        tryCatch.setType(function.getType().getSingleReturnType());
-        returnBlock.getBody().add(tryCatch);
-
-        var catchClause = new WasmCatch(context.getExceptionTag());
-        var catchVar = new WasmLocal(context.classInfoProvider().getClassInfo("java.lang.Throwable").getType());
-        catchClause.getCatchVariables().add(catchVar);
-        function.add(catchVar);
-
-        visitor.monitorExit(obj.get(), null, catchClause.getBody());
-        var rethrow = new WasmThrow(context.getExceptionTag());
-        rethrow.getArguments().add(new WasmGetLocal(catchVar));
-        catchClause.getBody().add(rethrow);
+        var tryCatch = builder.try_(function.getType().getSingleReturnType());
+        var catchClause = new WasmCatchClause(context.getExceptionTag());
         tryCatch.getCatches().add(catchClause);
 
-        visitor.monitorExit(obj.get(), null, target);
+        var catchBuilder = catchClause.builder();
+        catchBuilder.typeInference.typeStack.add(context.classInfoProvider().getClassInfo("java.lang.Throwable")
+                .getType());
+        generateMonitor(method, function, catchBuilder);
+        visitor.monitorExit(catchBuilder);
+        catchBuilder.throw_(context.getExceptionTag());
 
-        visitor.setReturnBlock(returnBlock);
+        generateMonitor(method, function, builder);
+        visitor.monitorExit(builder);
+
+        visitor.setReturnBlock(tryCatch.getBody());
 
         return tryCatch.getBody();
     }
 
-    private WasmExpression generateClassLiteral(String className) {
+    private void generateMonitor(MethodHolder method, WasmFunction function, WasmInstructionBuilder builder) {
+        if (method.hasModifier(ElementModifier.STATIC)) {
+            generateClassLiteral(builder, method.getOwnerName());
+        } else {
+            builder.getLocal(function.getLocalVariables().get(0));
+        }
+    }
+
+    private void generateClassLiteral(WasmInstructionBuilder builder, String className) {
         var arg = context.classInfoProvider().getClassInfo(className).getPointer();
         var classInfoType = context.classInfoProvider().reflectionTypes().classInfo();
-        return new WasmCall(classInfoType.classObjectFunction(), new WasmGetGlobal(arg));
+        builder
+                .getGlobal(arg)
+                .call(classInfoType.classObjectFunction());
     }
 
     private void eliminateMultipleNullConstantUsages(Program program) {
@@ -573,9 +570,10 @@ public class WasmGCMethodGenerator implements BaseWasmFunctionRepository {
             var classInfo = classInfoProvider.getClassInfo(method.getOwnerName());
             var erase = new WasmSetGlobal(classInfo.getInitializerPointer(),
                     new WasmFunctionReference(getDummyInitializer()));
-            function.getBody().add(erase);
+            var converter = new WasmExpressionToInstructionConverter(function.getBody());
+            converter.convert(erase);
             if (classInfoStruct.initializerIndex() >= 0) {
-                function.getBody().add(new WasmStructSet(
+                converter.convert(new WasmStructSet(
                         classInfoStruct.structure(),
                         new WasmGetGlobal(classInfo.getPointer()),
                         classInfoStruct.initializerIndex(),
